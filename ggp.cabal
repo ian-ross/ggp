@@ -1,0 +1,41 @@
+name:                ggp
+version:             0.1.0.0
+synopsis:            Generalised game playing
+-- description:
+license:             BSD3
+license-file:        LICENSE
+author:              Ian Ross
+maintainer:          ian@skybluetrades.net
+category:            Game
+build-type:          Simple
+cabal-version:       >=1.8
+
+library
+  exposed-modules:     GGP.Player
+                       GGP.Protocol
+  -- other-modules:
+  build-depends:       base                     >= 4.3        && < 5,
+                       bytestring               >= 0.10.0.2   && < 0.11,
+                       case-insensitive         >= 1.1        && < 1.2,
+                       http-types               >= 0.8.1      && < 0.9,
+                       resourcet                >= 0.4.8      && < 0.5,
+                       sexp                     >= 0.7        && < 0.8,
+                       wai                      >= 1.4.0.2    && < 1.5,
+                       wai-util                 >= 0.6        && < 0.7
+
+
+executable manual-player
+  build-depends:       ggp,
+                       base                     >= 4.3        && < 5,
+                       bytestring               >= 0.10.0.2   && < 0.11,
+                       blaze-builder            >= 0.3.1.1    && < 0.4,
+                       case-insensitive         >= 1.1        && < 1.2,
+                       conduit                  >= 1.0.7.4    && < 1.1,
+                       http-types               >= 0.8.1      && < 0.9,
+                       sexp                     >= 0.7        && < 0.8,
+                       transformers             >= 0.3        && < 0.4,
+                       wai                      >= 1.4.0.2    && < 1.5,
+                       wai-util                 >= 0.6        && < 0.7,
+                       warp                     >= 1.3.9.2    && < 1.4
+  hs-source-dirs:      players
+  main-is:             manual-player.hs
