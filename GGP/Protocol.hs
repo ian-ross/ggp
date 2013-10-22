@@ -12,69 +12,68 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as B8
 import Data.CaseInsensitive
-import Data.Sexp
-import qualified Language.Sexp.Parser as S
-import qualified Language.Sexp.Printer as P
 import Network.HTTP.Types.Header
 import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Util
 
-respHdrs :: ByteString -> ResponseHeaders
-respHdrs body = let len = BL.length body
+import Language.GDL
+
+respHdrs :: String -> ResponseHeaders
+respHdrs body = let len = length body
                 in [(hContentType, "text/acl"),
                     (hContentLength, BL.toStrict $ B8.pack $ show len)]
 
 data GGPRequest = Info
-                | Start { staMatch :: ByteString
-                        , staRole :: ByteString
-                        , staDesc :: [Sexp]
+                | Start { staMatch :: String
+                        , staRole :: String
+                        , staDesc :: Database
                         , staStartClock :: Int
                         , staPlayClock :: Int }
-                | Play { plaMatch :: ByteString
-                       , plaMoves :: Sexp }
-                | Stop { stoMatch :: ByteString
-                       , stoMoves :: Sexp }
+                | Play { plaMatch :: String
+                       , plaMoves :: Term }
+                | Stop { stoMatch :: String
+                       , stoMoves :: Term }
                 deriving (Eq, Show)
 
 data GGPReply = Available
               | Ready
-              | Action Sexp
+              | Action Term
               | Done
               deriving (Eq, Show)
 
-ggpParse :: Request -> ResourceT IO (Either ByteString GGPRequest)
+ggpParse :: Request -> ResourceT IO (Either String GGPRequest)
 ggpParse req = do
   body <- (foldedCase . mk) <$> bodyBytestring req
-  case S.parse $ BL.fromStrict body of
-    Left _ -> return $ Left "invalid message"
-    Right [] -> return $ Left "empty message"
+  case parseSexp $ B8.unpack $ BL.fromStrict body of
     Right [sexp] -> return $ makeGGPRequest sexp
-    Right _ -> return $ Left "invalid message"
+    _            -> return $ Left "invalid message"
 
-makeGGPRequest :: Sexp -> Either ByteString GGPRequest
-makeGGPRequest (List ["info"]) = Right Info
-makeGGPRequest (List ("start" : Atom match : Atom role : rest)) =
+makeGGPRequest :: Sexp -> Either String GGPRequest
+makeGGPRequest (SList ["info"]) = Right Info
+makeGGPRequest (SList ("start" : SAtom match : SAtom role : rest)) =
   let lenr = length rest
-      desc = take (lenr - 2) rest
+      desc = sexpsToDatabase $ take (lenr - 2) rest
       startclock = atomToInt $ (last . init) rest
       playclock = atomToInt $ last rest
   in case (lenr > 2, startclock, playclock) of
     (True, Just sclk, Just pclk) -> Right $ Start match role desc sclk pclk
     _                            -> Left "invalid START message"
-makeGGPRequest (List ["play", Atom match, moves]) = Right $ Play match moves
-makeGGPRequest (List ["stop", Atom match, moves]) = Right $ Stop match moves
+makeGGPRequest (SList ["play", SAtom match, moves]) =
+  Right $ Play match (sexpToTerm moves)
+makeGGPRequest (SList ["stop", SAtom match, moves]) =
+  Right $ Stop match (sexpToTerm moves)
 makeGGPRequest _ = Left "unrecognised GGP message type"
 
-ok :: Monad m => ByteString -> m Response
-ok rep = bytestring status200 (respHdrs rep) rep
+ok :: Monad m => String -> m Response
+ok rep = string status200 (respHdrs rep) rep
 
 ggpReply :: Monad m => GGPReply -> m Response
-ggpReply (Action sexp) = ok $ P.printMach sexp
-ggpReply rep = ok $ B8.pack $ show rep
+ggpReply (Action term) = ok $ printMach term
+ggpReply rep = ok $ show rep
 
 atomToInt :: Sexp -> Maybe Int
-atomToInt (Atom s) = case B8.readInt s of
+atomToInt (SAtom s) = case B8.readInt $ B8.pack s of
   Nothing -> Nothing
   Just (i, rest) -> if BL.null rest then Just i else Nothing
 atomToInt _ = Nothing
