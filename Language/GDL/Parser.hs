@@ -7,8 +7,6 @@ module Language.GDL.Parser
 
 import Control.Applicative ((<$>), (<*), (*>))
 import Data.List (foldl')
-import Data.Either
-import Data.Typeable (Typeable)
 import Text.Parsec.String
 import Text.Parsec hiding (parse)
 import qualified Text.Parsec as P
@@ -39,6 +37,10 @@ parseTerm s = case parseSexp s of
   _            -> Nothing
 
 -- | Convert a single S-exp to a term.
+sexpToTerm :: Sexp -> Term
+sexpToTerm (SAtom "_") = Wild
+sexpToTerm (SAtom ('?':s)) = Var s
+sexpToTerm (SAtom ('$':s)) = AntiVar s
 sexpToTerm (SAtom s) = Atom s
 sexpToTerm (SList ss) = Compound $ map sexpToTerm ss
 
@@ -54,6 +56,8 @@ sexpsToDatabase = reverse . foldl' (\db s -> convert s : db) []
 
 sexpToQuery :: Sexp -> Query
 sexpToQuery (SList [SAtom "not", t]) = Negation $ Query $ sexpToTerm t
+sexpToQuery (SList [SAtom "distinct", t1, t2]) =
+  Distinct (sexpToTerm t1) (sexpToTerm t2)
 sexpToQuery (SList (SAtom "and" : ts)) =
   Conjunction $ map sexpToQuery ts
 sexpToQuery (SList []) = Pass
@@ -76,8 +80,8 @@ sexpParser :: Parser Sexp
 sexpParser = choice [ list <?> "list", atom <?> "atom" ] where
   list = SList <$> (char '(' *> whiteSpace *>
                     many sexpParser <* char ')') <* whiteSpace
-  atom = SAtom . unescape <$> (choice [string, anything]) <* whiteSpace
-  string = char '"' *> many (noneOf "\"") <* char '"'
+  atom = SAtom . unescape <$> (choice [str, anything]) <* whiteSpace
+  str = char '"' *> many (noneOf "\"") <* char '"'
   anything = many1 (noneOf " \t\n()")
 
 -- | A parser for conventional ASCII whitespace and ";" line comments.

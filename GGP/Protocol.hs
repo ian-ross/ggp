@@ -54,8 +54,8 @@ makeGGPRequest (SList ["info"]) = Right Info
 makeGGPRequest (SList ("start" : SAtom match : SAtom role : rest)) =
   let lenr = length rest
       desc = sexpsToDatabase $ take (lenr - 2) rest
-      startclock = atomToInt $ (last . init) rest
-      playclock = atomToInt $ last rest
+      startclock = sexpToInt $ (last . init) rest
+      playclock = sexpToInt $ last rest
   in case (lenr > 2, startclock, playclock) of
     (True, Just sclk, Just pclk) -> Right $ Start match role desc sclk pclk
     _                            -> Left "invalid START message"
@@ -71,9 +71,3 @@ ok rep = string status200 (respHdrs rep) rep
 ggpReply :: Monad m => GGPReply -> m Response
 ggpReply (Action term) = ok $ printMach term
 ggpReply rep = ok $ show rep
-
-atomToInt :: Sexp -> Maybe Int
-atomToInt (SAtom s) = case B8.readInt $ B8.pack s of
-  Nothing -> Nothing
-  Just (i, rest) -> if BL.null rest then Just i else Nothing
-atomToInt _ = Nothing

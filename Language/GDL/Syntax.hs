@@ -2,9 +2,13 @@
 module Language.GDL.Syntax
        ( Sexp (..)
        , Identifier, Term (..), Query (..), Clause, Database
+       , State, Role, Move
        , escape, unescape
+       , sexpToInt, termToInt
        ) where
 
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as B8
 import Data.Data
 import Data.List
 import Data.String
@@ -19,8 +23,9 @@ type Identifier = String
 
 data Term = Atom String
           | Var Identifier
-          | AntiVar Identifier
           | Compound [Term]
+          | AntiVar Identifier
+          | Wild
           deriving (Eq, Show, Data, Typeable)
 
 instance IsString Term where
@@ -29,12 +34,17 @@ instance IsString Term where
 data Query = Query Term
            | Conjunction [Query]
            | Negation Query
+           | Distinct Term Term
            | Pass
            deriving (Eq, Show, Data, Typeable)
 
 type Clause = (Term, Query)
 
 type Database = [Clause]
+
+type Role = Term
+type Move = Term
+type State = [Clause]
 
 
 -- | Escape @"@ and @\@ in the given string.  This needs to be done
@@ -53,3 +63,16 @@ unescape = reverse . snd . (foldl' unescapeChar (False, []))
     unescapeChar :: (Bool, [Char]) -> Char -> (Bool, [Char])
     unescapeChar (False, cs) '\\' = (True, cs)
     unescapeChar (_, cs) c        = (False, c : cs)
+
+
+sexpToInt :: Sexp -> Maybe Int
+sexpToInt (SAtom s) = case B8.readInt $ B8.pack s of
+  Nothing -> Nothing
+  Just (i, rest) -> if BL.null rest then Just i else Nothing
+sexpToInt _ = Nothing
+
+termToInt :: Term -> Maybe Int
+termToInt (Atom s) = case B8.readInt $ B8.pack s of
+  Nothing -> Nothing
+  Just (i, rest) -> if BL.null rest then Just i else Nothing
+termToInt _ = Nothing
