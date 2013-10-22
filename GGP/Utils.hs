@@ -48,6 +48,14 @@ goal db st r =
       gs = qextract [gdlq|(goal $r ?g)|] (\[gdlq|(goal _ $g)|] -> g) db'
   in maybe (-1) fromIntegral . termToInt $ head gs
 
+-- | Apply moves to give a new state.
+applyMoves :: Database -> State -> [(Role, Move)] -> State
+applyMoves db st rms =
+  let ms = map (\(r, m) -> ([gdl|(does $r $m)|], Pass)) rms
+      db' = db ++ st ++ ms
+      conv [gdlq|(next $i)|] = ([gdl|(true $i)|], Pass)
+  in qextract [gdlq|(next ?i)|] conv db'
+
 -- nextStates :: Database -> State -> [State]
 -- nextStateIf :: Database -> State -> [Move] -> State
 -- nextStateMoves :: Database -> State -> Role -> M.Map Move [State]

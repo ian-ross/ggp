@@ -3,7 +3,6 @@ module Language.GDL.Quote
        ) where
 
 import Data.Data
-import Data.Typeable
 import Language.Haskell.TH
 import Language.Haskell.TH.Quote
 import Language.Haskell.AntiQuoter
@@ -12,30 +11,25 @@ import Language.GDL.Syntax
 import Language.GDL.Parser
 
 gdl :: QuasiQuoter
-gdl = QuasiQuoter { quoteExp = gdlToTHExp
-                  , quotePat  = error "No pattern quoter"
+gdl = QuasiQuoter { quoteExp = gdlToTHExp parseTerm
+                  , quotePat  = gdlToTHPat parseTerm
                   , quoteType = error "No type quoter"
                   , quoteDec  = error "No declaration quoter" }
 
 gdlq :: QuasiQuoter
-gdlq = QuasiQuoter { quoteExp = gdlqToTHExp
-                   , quotePat  = gdlqToTHPat
+gdlq = QuasiQuoter { quoteExp = gdlToTHExp parseQuery
+                   , quotePat  = gdlToTHPat parseQuery
                    , quoteType = error "No type quoter"
                    , quoteDec  = error "No declaration quoter" }
 
-gdlToTHExp :: String -> Q Exp
-gdlToTHExp s = case parseTerm s of
-  Nothing -> error $ "Parse failed in sexp quasiquoter"
+gdlToTHExp :: Data a => (String -> Maybe a) -> String -> Q Exp
+gdlToTHExp p s = case p s of
+  Nothing -> error $ "Parse failed in GDL quasiquoter"
   Just e  -> dataToExpQ antiE e
 
-gdlqToTHExp :: String -> Q Exp
-gdlqToTHExp s = case parseQuery s of
-  Nothing -> error $ "Parse failed in sexp quasiquoter"
-  Just e  -> dataToExpQ antiE e
-
-gdlqToTHPat :: String -> Q Pat
-gdlqToTHPat s = case parseQuery s of
-  Nothing -> error $ "Parse failed in sexp quasiquoter"
+gdlToTHPat :: Data a => (String -> Maybe a) -> String -> Q Pat
+gdlToTHPat p s = case p s of
+  Nothing -> error $ "Parse failed in GDL quasiquoter"
   Just e  -> dataToPatQ antiP e
 
 antiExp :: Term -> Maybe (Q Exp)
