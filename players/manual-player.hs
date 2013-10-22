@@ -13,8 +13,8 @@ import System.IO
 import GGP.Protocol
 import Language.GDL
 
-handler :: Application
-handler req = do
+manualHandler :: Application
+manualHandler req = do
   ereq <- ggpParse req
   case ereq of
     Left err -> string status500 [] err
@@ -42,4 +42,11 @@ getResp = do
     _      -> getResp
 
 main :: IO ()
-main = run 9147 handler
+main = run 9147 manualHandler
+
+ok :: Monad m => String -> m Response
+ok rep = string status200 (respHdrs rep) rep
+
+ggpReply :: Monad m => GGPReply -> m Response
+ggpReply (Action term) = ok $ printMach term
+ggpReply rep = ok $ show rep
