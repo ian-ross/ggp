@@ -52,6 +52,7 @@ defaultMain player = do
 handler :: IORef MatchMap -> Player -> Application
 handler rmatchmap player req = do
   ereq <- ggpParse req
+  liftIO $ putStrLn $ "REQ: " ++ show ereq
   case ereq of
     Left err -> string status500 [] err
     Right r -> do
@@ -65,6 +66,7 @@ handler rmatchmap player req = do
             Start matchid role db sclk pclk ->
               doStart matchid role db sclk pclk player rmatchmap
             Play matchid moves -> doPlay matchid moves player matchmap
+      liftIO $ putStrLn $ "RESP: " ++ show response
       ggpReply response
 
 doStart :: String -> Term -> Database -> Int -> Int -> Player -> IORef MatchMap
@@ -105,9 +107,12 @@ zipMoves :: [Role] -> Term -> Maybe [(Role, Move)]
 zipMoves _  (Atom "nil") = Nothing
 zipMoves rs (Compound ms) = Just $ zip rs ms
 
-ok :: Monad m => String -> m Response
-ok rep = string status200 (respHdrs rep) rep
+ok :: (Monad m, MonadIO m) => String -> m Response
+ok rep = do
+  let hdrs = respHdrs rep
+  liftIO $ putStrLn $ "RAW RESP:\n" ++ show hdrs ++ "\n-----\n" ++ rep
+  string status200 hdrs rep
 
-ggpReply :: Monad m => GGPReply -> m Response
+ggpReply :: (Monad m, MonadIO m) => GGPReply -> m Response
 ggpReply (Action term) = ok $ printMach term
 ggpReply rep = ok $ show rep
