@@ -26,6 +26,7 @@ library
                        antiquoter               >= 0.1.1.0    && < 0.2,
                        bytestring               >= 0.10.0.2   && < 0.11,
                        case-insensitive         >= 1.1        && < 1.2,
+                       cmdargs                  >= 0.10.5     && < 0.11,
                        containers               >= 0.5.0.0    && < 0.6,
                        data-default             >= 0.5.3      && < 0.6,
                        http-types               >= 0.8.1      && < 0.9,

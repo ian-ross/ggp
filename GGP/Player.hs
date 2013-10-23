@@ -1,10 +1,13 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
        , def, defaultMain
        , liftIO, get, gets ) where
 
+import Prelude hiding (log)
 import Control.Applicative
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
@@ -16,6 +19,8 @@ import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Util
+import System.Console.CmdArgs.Implicit hiding (Default, def)
+import qualified System.Console.CmdArgs.Implicit as SCCI
 
 import Language.GDL hiding (State)
 import qualified Language.GDL as GDL
@@ -45,15 +50,27 @@ instance Default Player where
 
 type MatchMap = M.Map String (IORef Match)
 
+data PlayerArgs = PlayerArgs { port :: Int, log :: Bool }
+                deriving (Show, Data, Typeable)
+
+playerArgs :: Annotate Ann
+playerArgs = record PlayerArgs { port = 9147, log = False }
+             [ port := SCCI.def += help "Network port" += opt (9147 :: Int)
+             , log := SCCI.def += help "Message logging"]
+             += summary "Generic player interface"
+             += program "player"
+
 defaultMain :: Player -> IO ()
 defaultMain player = do
+  pas <- cmdArgs_ playerArgs
   matchInfo <- newIORef M.empty
-  run 9147 (handler matchInfo player)
+  run (port pas) (handler (log pas) matchInfo player)
 
-handler :: IORef MatchMap -> Player -> Application
-handler rmatchmap player req = do
+handler :: Bool -> IORef MatchMap -> Player -> Application
+handler logging rmatchmap player req = do
   ereq <- ggpParse req
-  liftIO $ putStrLn $ "REQ: " ++ show ereq
+  when logging $
+    liftIO $ putStrLn $ "REQ: " ++ show ereq
   case ereq of
     Left err -> string status500 [] err
     Right r -> do
@@ -67,7 +84,8 @@ handler rmatchmap player req = do
             Start matchid role db sclk pclk ->
               doStart matchid role db sclk pclk player rmatchmap
             Play matchid moves -> doPlay matchid moves player matchmap
-      liftIO $ putStrLn $ "RESP: " ++ show response
+      when logging $
+        liftIO $ putStrLn $ "RESP: " ++ show response
       ggpReply response
 
 doStart :: String -> Term -> Database -> Int -> Int -> Player -> IORef MatchMap
@@ -108,12 +126,9 @@ zipMoves :: [Role] -> Term -> Maybe [(Role, Move)]
 zipMoves _  (Atom "nil") = Nothing
 zipMoves rs (Compound ms) = Just $ zip rs ms
 
-ok :: (Monad m, MonadIO m) => String -> m Response
-ok rep = do
-  let hdrs = respHdrs rep
-  liftIO $ putStrLn $ "RAW RESP:\n" ++ show hdrs ++ "\n-----\n" ++ rep
-  string status200 hdrs rep
+ok :: Monad m => String -> m Response
+ok rep = string status200 (respHdrs rep) rep
 
-ggpReply :: (Monad m, MonadIO m) => GGPReply -> m Response
+ggpReply :: Monad m => GGPReply -> m Response
 ggpReply (Action term) = ok $ map toLower $ printMach term
 ggpReply rep = ok $ map toLower $ show rep
