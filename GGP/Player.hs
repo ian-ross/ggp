@@ -8,6 +8,7 @@ import Control.Applicative
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
+import Data.Char
 import Data.Default
 import Data.IORef
 import qualified Data.Map as M
@@ -114,5 +115,5 @@ ok rep = do
   string status200 hdrs rep
 
 ggpReply :: (Monad m, MonadIO m) => GGPReply -> m Response
-ggpReply (Action term) = ok $ printMach term
-ggpReply rep = ok $ show rep
+ggpReply (Action term) = ok $ map toLower $ printMach term
+ggpReply rep = ok $ map toLower $ show rep
