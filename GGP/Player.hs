@@ -3,14 +3,17 @@ module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
        , def, defaultMain
-       , liftIO, get, gets ) where
+       , liftIO, get, put, gets
+       , getRandom, getRandoms, getRandomR, getRandomRs ) where
 
 import Prelude hiding (log)
-import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Random
+import Control.Monad.Trans.Class
 import Control.Monad.Trans.Resource
-import Control.Monad.Trans.State
+import Control.Monad.Trans.State hiding (get, put, gets)
+import qualified Control.Monad.Trans.State as CMTS
 import Data.Char
 import Data.Default
 import Data.IORef
@@ -34,9 +37,18 @@ data Match = Match { matchDB :: Database
                    , matchLastMoves :: Maybe [(Role, Move)]
                    , matchStartClock :: Int
                    , matchPlayClock :: Int
-                   } deriving (Eq, Show)
+                   } deriving (Show)
 
-type GGP a = StateT Match IO a
+type GGP a = RandT StdGen (StateT Match IO) a
+
+get :: Monad m => RandT g (StateT s m) s
+get = lift CMTS.get
+
+put :: Monad m => s -> RandT g (StateT s m) ()
+put s = lift (CMTS.put s)
+
+gets :: Monad m => (s -> a) -> RandT g (StateT s m) a
+gets f = lift (liftM f CMTS.get)
 
 data Player = Player { handleStart :: GGP GGPReply
                      , handlePlay :: Maybe [(Role, Move)] -> GGP GGPReply
@@ -48,15 +60,15 @@ instance Default Player where
                , handleStop = const (return Done)
                , handlePlay = const (return Ready) }
 
-type MatchMap = M.Map String (IORef Match)
+type MatchMap = M.Map String (IORef (StdGen, Match))
 
 data PlayerArgs = PlayerArgs { port :: Int, log :: Bool }
                 deriving (Show, Data, Typeable)
 
 playerArgs :: Annotate Ann
 playerArgs = record PlayerArgs { port = 9147, log = False }
-             [ port := SCCI.def += help "Network port" += opt (9147 :: Int)
-             , log := SCCI.def += help "Message logging"]
+             [ port := 9147 += help "Network port"
+             , log := False += help "Message logging"]
              += summary "Generic player interface"
              += program "player"
 
@@ -64,6 +76,7 @@ defaultMain :: Player -> IO ()
 defaultMain player = do
   pas <- cmdArgs_ playerArgs
   matchInfo <- newIORef M.empty
+  putStrLn $ "Running on port " ++ show (port pas)
   run (port pas) (handler (log pas) matchInfo player)
 
 handler :: Bool -> IORef MatchMap -> Player -> Application
@@ -92,34 +105,37 @@ doStart :: String -> Term -> Database -> Int -> Int -> Player -> IORef MatchMap
         -> ResourceT IO GGPReply
 doStart matchid role db sclk pclk player rmatchmap = do
   let st = initState db
+  gen <- liftIO $ newStdGen
   let match = Match db st role (roles db) Nothing sclk pclk
   matchmap <- liftIO $ readIORef rmatchmap
-  rmatch <- liftIO $ newIORef match
+  rmatch <- liftIO $ newIORef (gen, match)
   liftIO $ writeIORef rmatchmap (M.insert matchid rmatch matchmap)
-  (resp, match') <- liftIO $ flip runStateT match $ handleStart player
-  liftIO $ writeIORef rmatch match'
+  let start = handleStart player
+  ((resp, gen'), match') <- liftIO $ runStateT (runRandT start gen) match
+  liftIO $ writeIORef rmatch (gen', match')
   return resp
 
 doPlay :: String -> Term -> Player -> MatchMap -> ResourceT IO GGPReply
 doPlay matchid moves player matchmap = do
   let rmatch = matchmap M.! matchid
-  m <- liftIO $ readIORef rmatch
+  (gen, m) <- liftIO $ readIORef rmatch
   let zms = zipMoves (matchRoles m) moves
       st = matchState m
       st' = maybe st (applyMoves (matchDB m) st) zms
       match' = m { matchState = st', matchLastMoves = zms }
-  (resp, match'') <- liftIO $ flip runStateT match' $ handlePlay player zms
-  liftIO $ writeIORef rmatch match''
+      play = handlePlay player zms
+  ((resp, gen'), match'') <- liftIO $ runStateT (runRandT play gen) match'
+  liftIO $ writeIORef rmatch (gen', match'')
   return resp
 
 doStop :: String -> Term -> Player -> MatchMap -> ResourceT IO GGPReply
 doStop matchid moves player matchmap = do
   let rmatch = matchmap M.! matchid
-  match <- liftIO $ readIORef rmatch
-  (resp, match') <- liftIO $ flip runStateT match $ do
-    rs <- matchRoles <$> get
-    handleStop player $ zipMoves rs moves
-  liftIO $ writeIORef rmatch match'
+  (gen, match) <- liftIO $ readIORef rmatch
+  let rs = matchRoles match
+      stop = handleStop player (zipMoves rs moves)
+  ((resp, gen'), match') <- liftIO $ runStateT (runRandT stop gen) match
+  liftIO $ writeIORef rmatch (gen', match')
   return resp
 
 zipMoves :: [Role] -> Term -> Maybe [(Role, Move)]
