@@ -20,7 +20,8 @@ import Language.GDL
 respHdrs :: String -> ResponseHeaders
 respHdrs body = let len = length body
                 in [(hContentType, "text/acl"),
-                    (hContentLength, BL.toStrict $ B8.pack $ show len)]
+                    (hContentLength, BL.toStrict $ B8.pack $ show len),
+                    ("Access-Control-Allow-Origin", "*")]
 
 data GGPRequest = Info
                 | Start { reqMatch :: String
