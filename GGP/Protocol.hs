@@ -6,6 +6,7 @@ module GGP.Protocol
        , respHdrs ) where
 
 import Control.Applicative
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as B8
@@ -48,15 +49,15 @@ ggpParse req = do
 
 makeGGPRequest :: Sexp -> Either String GGPRequest
 makeGGPRequest (SList ["info"]) = Right Info
-makeGGPRequest (SList ("start" : SAtom match : role : rest)) =
-  let lenr = length rest
-      desc = sexpsToDatabase $ take (lenr - 2) rest
-      startclock = sexpToInt $ (last . init) rest
-      playclock = sexpToInt $ last rest
-      trole = sexpToTerm role
-  in case (lenr > 2, startclock, playclock) of
-    (True, Just sclk, Just pclk) -> Right $ Start match trole desc sclk pclk
-    _                            -> Left "invalid START message"
+makeGGPRequest (SList ["start", SAtom match, SAtom role,
+                       SList rules, sclk, pclk]) =
+  let desc = sexpsToDatabase rules
+      startclock = sexpToInt sclk
+      playclock = sexpToInt pclk
+      trole = Atom role
+  in case (startclock, playclock) of
+    (Just s, Just p) -> Right $ Start match trole desc s p
+    _                -> Left "invalid START message"
 makeGGPRequest (SList ["play", SAtom match, moves]) =
   Right $ Play match (sexpToTerm moves)
 makeGGPRequest (SList ["stop", SAtom match, moves]) =

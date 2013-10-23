@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
 module GGP.Utils where
 
-import Data.List (transpose)
+import Data.List (transpose, nub)
 
 import Language.GDL
 
@@ -54,7 +54,7 @@ applyMoves db st rms =
   let ms = map (\(r, m) -> ([gdl|(does $r $m)|], Pass)) rms
       db' = db ++ st ++ ms
       conv [gdlq|(next $i)|] = ([gdl|(true $i)|], Pass)
-  in qextract [gdlq|(next ?i)|] conv db'
+  in nub $ qextract [gdlq|(next ?i)|] conv db'
 
 -- nextStates :: Database -> State -> [State]
 -- nextStateIf :: Database -> State -> [Move] -> State
