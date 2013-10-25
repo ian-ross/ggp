@@ -6,7 +6,6 @@ module GGP.Protocol
        , respHdrs ) where
 
 import Control.Applicative
-import Control.Monad.IO.Class
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as B8

@@ -26,9 +26,11 @@ qeval' :: STRef s Integer -> Database -> Query -> [Substitution]
 qeval' _ _ Pass frames = return frames
 qeval' counter db (Query struct) frames = fmap concat . mapM applied $ frames
   where applied frame = fmap concat . mapM (apply counter db frame struct) $ db
-qeval' counter db (Conjunction conjuncts) frames =
+qeval' counter db (And conjuncts) frames =
   foldM (flip $ qeval' counter db) frames conjuncts
-qeval' counter db (Negation child) frames = do
+qeval' counter db (Or disjuncts) frames =
+  fmap concat . mapM (\child -> qeval' counter db child frames) $ disjuncts
+qeval' counter db (Not child) frames = do
   frames' <- mapM (\frame -> qeval' counter db child [frame]) frames
   return [frame | (frame, []) <- zip frames frames']
 qeval' _counter _db (Distinct c1 c2) frames = return $ filter different frames
@@ -53,9 +55,10 @@ rewriteClause p (bod, concl) = (rewrite p bod, rewriteQ p concl)
 
 rewriteQ :: String -> Query -> Query
 rewriteQ p (Query t) = Query $ rewrite p t
-rewriteQ p (Conjunction cs) = Conjunction $ map (rewriteQ p) cs
+rewriteQ p (And cs) = And $ map (rewriteQ p) cs
+rewriteQ p (Or cs) = Or $ map (rewriteQ p) cs
 rewriteQ p (Distinct c1 c2) = Distinct (rewrite p c1) (rewrite p c2)
-rewriteQ p (Negation c) = Negation $ rewriteQ p c
+rewriteQ p (Not c) = Not $ rewriteQ p c
 rewriteQ _ Pass = Pass
 
 rewrite :: String -> Term -> Term
@@ -67,8 +70,9 @@ rewrite p (Compound cs) = Compound $ map (rewrite p) cs
 instantiate :: Substitution -> Query -> Query
 instantiate _ Pass = Pass
 instantiate sub (Query q) = Query $ inst sub q
-instantiate sub (Conjunction cs) = Conjunction $ map (instantiate sub) cs
-instantiate sub (Negation c) = Negation $ instantiate sub c
+instantiate sub (And cs) = And $ map (instantiate sub) cs
+instantiate sub (Or cs) = Or $ map (instantiate sub) cs
+instantiate sub (Not c) = Not $ instantiate sub c
 
 inst :: Substitution -> Term -> Term
 inst _ x@(Atom _) = x

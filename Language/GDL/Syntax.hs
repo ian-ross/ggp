@@ -32,8 +32,9 @@ instance IsString Term where
   fromString = Atom
 
 data Query = Query Term
-           | Conjunction [Query]
-           | Negation Query
+           | And [Query]
+           | Or [Query]
+           | Not Query
            | Distinct Term Term
            | Pass
            deriving (Eq, Show, Data, Typeable)

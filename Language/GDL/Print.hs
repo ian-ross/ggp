@@ -22,8 +22,9 @@ instance Pretty Term where
 
 instance Pretty Query where
   pretty (Query t) = pretty t
-  pretty (Conjunction qs) = parens (text "and" <+> (hsep $ map pretty qs))
-  pretty (Negation q) = parens (text "not" <+> pretty q)
+  pretty (And qs) = parens (text "and" <+> (hsep $ map pretty qs))
+  pretty (Or qs) = parens (text "or" <+> (hsep $ map pretty qs))
+  pretty (Not q) = parens (text "not" <+> pretty q)
   pretty (Distinct t1 t2) = parens (text "distinct" <+> pretty t1 <+> pretty t2)
   pretty Pass = empty
 

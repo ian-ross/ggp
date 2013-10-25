@@ -23,7 +23,6 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Util
 import System.Console.CmdArgs.Implicit hiding (Default, def)
-import qualified System.Console.CmdArgs.Implicit as SCCI
 
 import Language.GDL hiding (State)
 import qualified Language.GDL as GDL

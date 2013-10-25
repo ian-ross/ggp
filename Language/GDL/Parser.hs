@@ -51,15 +51,15 @@ sexpsToDatabase = reverse . foldl' (\db s -> convert s : db) []
         convert (SList (SAtom "<=" : ss)) = case ss of
           [h] -> (sexpToTerm h, Pass)
           [h, t] -> (sexpToTerm h, sexpToQuery t)
-          (h:ts) -> (sexpToTerm h, Conjunction $ map sexpToQuery ts)
+          (h:ts) -> (sexpToTerm h, And $ map sexpToQuery ts)
         convert s = (sexpToTerm s, Pass)
 
 sexpToQuery :: Sexp -> Query
-sexpToQuery (SList [SAtom "not", t]) = Negation $ Query $ sexpToTerm t
+sexpToQuery (SList [SAtom "not", t]) = Not $ Query $ sexpToTerm t
 sexpToQuery (SList [SAtom "distinct", t1, t2]) =
   Distinct (sexpToTerm t1) (sexpToTerm t2)
-sexpToQuery (SList (SAtom "and" : ts)) =
-  Conjunction $ map sexpToQuery ts
+sexpToQuery (SList (SAtom "and" : ts)) = And $ map sexpToQuery ts
+sexpToQuery (SList (SAtom "or" : ts)) = Or $ map sexpToQuery ts
 sexpToQuery (SList []) = Pass
 sexpToQuery t = Query $ sexpToTerm t
 
