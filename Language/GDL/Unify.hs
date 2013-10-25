@@ -13,6 +13,7 @@ occurs :: Identifier -> Term -> Bool
 occurs _ (Atom _) = False
 occurs ident (Var identr) = ident == identr
 occurs ident (Compound children) = any (occurs ident) children
+occurs _ _ = False
 
 extend :: Substitution -> Identifier -> Term -> Maybe Substitution
 extend sub ident value = case M.lookup ident sub of

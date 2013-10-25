@@ -6,7 +6,7 @@ import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-playRandom :: Maybe [(Role, Move)] -> GGP GGPReply
+playRandom :: Maybe [(Role, Move)] -> GGP () GGPReply
 playRandom _mmoves = do
   Match {..} <- get
   liftIO $ putStrLn $ "State: " ++ prettyPrint matchState

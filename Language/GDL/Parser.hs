@@ -52,6 +52,7 @@ sexpsToDatabase = reverse . foldl' (\db s -> convert s : db) []
           [h] -> (sexpToTerm h, Pass)
           [h, t] -> (sexpToTerm h, sexpToQuery t)
           (h:ts) -> (sexpToTerm h, And $ map sexpToQuery ts)
+          [] -> error "Free-standing implication symbol"
         convert s = (sexpToTerm s, Pass)
 
 sexpToQuery :: Sexp -> Query

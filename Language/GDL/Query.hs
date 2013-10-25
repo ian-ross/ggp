@@ -4,17 +4,16 @@ module Language.GDL.Query
        ) where
 
 import qualified Data.Map as M
+import Data.Maybe
 import Data.STRef
 import Control.Monad
 import Control.Monad.ST
 
-import Debug.Trace
-
 import Language.GDL.Syntax
 import Language.GDL.Unify
 
-qextract :: Query -> (Query -> a) -> Database -> [a]
-qextract q ex db = map (ex . flip instantiate q) $ query db q
+qextract :: Query -> (Query -> Maybe a) -> Database -> [a]
+qextract q ex db = catMaybes $ map (ex . flip instantiate q) $ query db q
 
 query :: Database -> Query -> [Substitution]
 query db q = runST $ do
@@ -66,6 +65,7 @@ rewrite _ x@(Atom _) = x
 rewrite p (Var i) = Var (p ++ i)
 rewrite _ (AntiVar i) = AntiVar i
 rewrite p (Compound cs) = Compound $ map (rewrite p) cs
+rewrite _ Wild = Wild
 
 instantiate :: Substitution -> Query -> Query
 instantiate _ Pass = Pass
@@ -73,6 +73,7 @@ instantiate sub (Query q) = Query $ inst sub q
 instantiate sub (And cs) = And $ map (instantiate sub) cs
 instantiate sub (Or cs) = Or $ map (instantiate sub) cs
 instantiate sub (Not c) = Not $ instantiate sub c
+instantiate sub (Distinct t1 t2) = Distinct (inst sub t1) (inst sub t2)
 
 inst :: Substitution -> Term -> Term
 inst _ x@(Atom _) = x
@@ -81,3 +82,4 @@ inst sub (Var i) = case M.lookup i sub of
   Nothing -> error $ "Cannot instantiate variable " ++ i
 inst _ (AntiVar i) = error $ "Cannot instantiate anti-variable " ++ i
 inst sub (Compound cs) = Compound $ map (inst sub) cs
+inst _ Wild = error $ "Cannot instantiate wildcard"

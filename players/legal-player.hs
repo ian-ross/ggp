@@ -6,7 +6,7 @@ import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-playLegal :: Maybe [(Role, Move)] -> GGP GGPReply
+playLegal :: Maybe [(Role, Move)] -> GGP () GGPReply
 playLegal _mmoves = do
   Match {..} <- get
   liftIO $ putStrLn $ "State: " ++ prettyPrint matchState
