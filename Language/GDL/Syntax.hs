@@ -26,7 +26,7 @@ data Term = Atom String
           | Compound [Term]
           | AntiVar Identifier
           | Wild
-          deriving (Eq, Show, Data, Typeable)
+          deriving (Eq, Ord, Show, Data, Typeable)
 
 instance IsString Term where
   fromString = Atom
@@ -37,7 +37,7 @@ data Query = Query Term
            | Not Query
            | Distinct Term Term
            | Pass
-           deriving (Eq, Show, Data, Typeable)
+           deriving (Eq, Ord, Show, Data, Typeable)
 
 type Clause = (Term, Query)
 

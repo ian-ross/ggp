@@ -3,7 +3,8 @@ module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
        , def, defaultMain
-       , liftIO, get, put, gets
+       , liftIO, get, put, gets, modify
+       , logMsg
        , getRandom, getRandoms, getRandomR, getRandomRs ) where
 
 import Prelude hiding (log)
@@ -12,7 +13,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Random
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Resource
-import Control.Monad.Trans.State hiding (get, put, gets)
+import Control.Monad.Trans.State hiding (get, put, gets, modify)
 import qualified Control.Monad.Trans.State as CMTS
 import Data.Char
 import Data.Default
@@ -37,6 +38,7 @@ data Match a = Match { matchDB :: Database
                      , matchStartClock :: Int
                      , matchPlayClock :: Int
                      , matchExtra :: a
+                     , matchLogging :: Bool
                      } deriving (Show)
 
 type GGP a b = RandT StdGen (StateT (Match a) IO) b
@@ -49,6 +51,14 @@ put s = lift (CMTS.put s)
 
 gets :: Monad m => (s -> a) -> RandT g (StateT s m) a
 gets f = lift (liftM f CMTS.get)
+
+modify :: Monad m => (s -> s) -> RandT g (StateT s m) ()
+modify f = lift (CMTS.modify f)
+
+logMsg :: String -> GGP a ()
+logMsg msg = do
+  logging <- gets matchLogging
+  when logging $ liftIO $ putStrLn msg
 
 data Player a = Player { initExtra :: a
                        , handleStart :: GGP a GGPReply
@@ -97,20 +107,20 @@ handler logging rmatchmap player req = do
           case r of
             Stop matchid moves -> doStop matchid moves player matchmap
             Start matchid role db sclk pclk ->
-              doStart matchid role db sclk pclk player rmatchmap
+              doStart matchid role db sclk pclk logging player rmatchmap
             Play matchid moves -> doPlay matchid moves player matchmap
             Info -> error "Oops"
       when logging $
         liftIO $ putStrLn $ "RESP: " ++ show response
       ggpReply response
 
-doStart :: String -> Term -> Database -> Int -> Int -> Player a
+doStart :: String -> Term -> Database -> Int -> Int -> Bool -> Player a
         -> IORef (MatchMap a) -> ResourceT IO GGPReply
-doStart matchid role db sclk pclk player rmatchmap = do
+doStart matchid role db sclk pclk logging player rmatchmap = do
   let st = initState db
   gen <- liftIO $ newStdGen
   let extra = initExtra player
-      match = Match db st role (roles db) Nothing sclk pclk extra
+      match = Match db st role (roles db) Nothing sclk pclk extra logging
   matchmap <- liftIO $ readIORef rmatchmap
   rmatch <- liftIO $ newIORef (gen, match)
   liftIO $ writeIORef rmatchmap (M.insert matchid rmatch matchmap)
