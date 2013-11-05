@@ -7,6 +7,9 @@ import Deliberation
 import Minimax
 import AlphaBeta
 import DepthLimitedMinimax
+import MobilityMinimax
+import MobilityAlphaBeta
+import GoalAlphaBeta
 
 main :: IO ()
 main = defaultMain $ \pas -> do
@@ -15,6 +18,9 @@ main = defaultMain $ \pas -> do
     "random"                -> runPlayer randomPlayer
     "deliberation"          -> runPlayer deliberationPlayer
     "minimax"               -> runPlayer minimaxPlayer
-    "alphabeta"             -> runPlayer alphaBetaPlayer
+    "alpha-beta"            -> runPlayer alphaBetaPlayer
     "depth-limited-minimax" -> runPlayer depthLimitedMinimaxPlayer
+    "mobility-minimax"      -> runPlayer mobilityMinimaxPlayer
+    "mobility-alpha-beta"   -> runPlayer mobilityAlphaBetaPlayer
+    "goal-alpha-beta"       -> runPlayer goalAlphaBetaPlayer
     _                       -> error "Invalid player type"

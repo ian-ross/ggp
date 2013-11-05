@@ -2,6 +2,8 @@
 module GGP.Utils where
 
 import Data.List (transpose, nub)
+import Data.Set (Set)
+import qualified Data.Set as S
 
 import Language.GDL
 
@@ -25,6 +27,14 @@ legal db st r =
   qextract [gdlq|(legal $r ?m)|] (\t -> case t of
                                      [gdlq|(legal _ $m)|] -> Just m
                                      _ -> Nothing) (db ++ st)
+
+-- | Determine all feasible moves in a game for a given role using the
+-- "input" relation.
+feasible :: Database -> Role -> Set Move
+feasible db r = S.fromList $ qextract [gdlq|(input $r ?m)|]
+                (\t -> case t of
+                    [gdlq|(input _ $m)|] -> Just m
+                    _ -> Nothing) db
 
 -- | Determine the set of joint legal moves for all roles in a given
 -- state.

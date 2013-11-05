@@ -58,7 +58,7 @@ executable manual-player
                        warp                     >= 1.3.9.2    && < 1.4
   hs-source-dirs:      players
   main-is:             manual-player.hs
-  ghc-options:         -Wall -fwarn-tabs
+  ghc-options:         -Wall -fwarn-tabs -O2
 
 executable player
   build-depends:       ggp,
@@ -74,4 +74,7 @@ executable player
                        Minimax
                        AlphaBeta
                        DepthLimitedMinimax
-  ghc-options:         -Wall -fwarn-tabs
+                       MobilityMinimax
+                       MobilityAlphaBeta
+                       GoalAlphaBeta
+  ghc-options:         -Wall -fwarn-tabs -O2

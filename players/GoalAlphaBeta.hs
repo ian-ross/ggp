@@ -1,33 +1,39 @@
 {-# LANGUAGE RecordWildCards, TemplateHaskell #-}
-module AlphaBeta (alphaBetaPlayer) where
+module GoalAlphaBeta (goalAlphaBetaPlayer) where
 
 import Control.Monad
-import Data.List (intercalate, delete)
+import Data.List (delete)
 import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-type Game a = GGP Int a
+data DLState = DLState { maxDepth :: Int, nest :: Int }
+
+instance Default DLState where
+  def = DLState { maxDepth = 2, nest = 0 }
+
+type Game a = GGP DLState a
 
 modNest :: Int -> Game ()
-modNest delta = modExtra (+ delta)
+modNest delta = modExtra (\e -> e { nest = nest e + delta })
 
 msg :: String -> Game ()
 msg s = do
   e <- gets matchExtra
-  logMsg $ replicate e ' ' ++ s
+  logMsg $ replicate (nest e) ' ' ++ s
 
-minscore :: Integer -> Integer -> State -> Move -> Game Integer
-minscore alpha beta st m = do
+minscore :: Int -> Integer -> Integer -> State -> Move -> Game Integer
+minscore level alpha beta st m = do
   Match {..} <- get
-  msg $ "minscore: st=" ++ (intercalate ", " $ map prettyPrint st) ++
+  msg $ "maxscore: level=" ++ show level ++
+    " alpha=" ++ show alpha ++ " beta=" ++ show beta ++
     " m=" ++ prettyPrint m
   let oppRole = head $ delete matchRole $ roles matchDB
       acts = legal matchDB st oppRole
       go _alp bet [] = return bet
       go alp bet (a:as) = do
         let poss = applyMoves matchDB st [(matchRole, m), (oppRole, a)]
-        s <- maxscore alp bet poss
+        s <- maxscore (level + 1) alp bet poss
         let bet' = bet `min` s
         if bet' <= alp
           then return alp
@@ -38,18 +44,19 @@ minscore alpha beta st m = do
   msg $ "minscore returns " ++ show retval
   return retval
 
-maxscore :: Integer -> Integer -> State -> Game Integer
-maxscore alpha beta st = do
+maxscore :: Int -> Integer -> Integer -> State -> Game Integer
+maxscore level alpha beta st = do
   Match {..} <- get
-  msg $ "maxscore: st=" ++ (intercalate ", " $ map prettyPrint st)
-  retval <- if isTerminal matchDB st
+  msg $ "maxscore: level=" ++ show level ++
+    " alpha=" ++ show alpha ++ " beta=" ++ show beta
+  let acts = legal matchDB st matchRole
+  retval <- if isTerminal matchDB st || level >= maxDepth matchExtra
             then return $ goal matchDB st matchRole
             else do
               modNest 1
-              let acts = legal matchDB st matchRole
-                  go alp _bet [] = return alp
+              let go alp _bet [] = return alp
                   go alp bet (a:as) = do
-                    s <- minscore alp bet st a
+                    s <- minscore level alp bet st a
                     let alp' = alp `max` s
                     if alp' >= bet
                       then return bet
@@ -64,7 +71,7 @@ bestMove :: State -> Game Move
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
-  vs <- forM as (minscore 0 100 st0)
+  vs <- forM as (minscore 0 0 100 st0)
   let avs = zip as vs
       bestv = maximum vs
       possas = map fst $ filter ((== bestv) . snd) avs
@@ -73,6 +80,11 @@ bestMove st0 = do
   idx <- getRandomR (0, length possas-1)
   return $ possas !! idx
 
-alphaBetaPlayer :: Player Int
-alphaBetaPlayer = def { initExtra = const 0
-                      , handlePlay = basicPlay bestMove }
+initEx :: PlayerParams -> DLState
+initEx ps = case getParam "maxDepth" ps of
+  Nothing -> DLState 2 0
+  Just d -> DLState (read d :: Int) 0
+
+goalAlphaBetaPlayer :: Player DLState
+goalAlphaBetaPlayer = def { initExtra = initEx
+                          , handlePlay = basicPlay bestMove }

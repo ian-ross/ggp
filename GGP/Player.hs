@@ -22,6 +22,7 @@ import Data.Default
 import Data.IORef
 import Data.List (intercalate)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -38,6 +39,7 @@ data Match a = Match { matchDB :: Database
                      , matchRole :: Role
                      , matchRoles :: [Role]
                      , matchNRoles :: Int
+                     , matchNFeasible :: Int
                      , matchLastMoves :: Maybe [(Role, Move)]
                      , matchStartClock :: Int
                      , matchPlayClock :: Int
@@ -110,7 +112,9 @@ runPlayer p = do
   pas <- cmdArgs_ playerArgs
   matchInfo <- newIORef M.empty
   putStrLn $ "Running on port " ++ show (port pas) ++ " (" ++ player pas ++ ")"
-  run (port pas) (handler (log pas) (processParams $ params pas) matchInfo p)
+  let ps = processParams $ params pas
+  putStrLn $ "Parameters: " ++ show ps
+  run (port pas) (handler (log pas) ps matchInfo p)
 
 processParams :: String -> PlayerParams
 processParams = M.fromList . map (spl . trim) . chunks
@@ -119,7 +123,7 @@ processParams = M.fromList . map (spl . trim) . chunks
                     in p : chunks (drop 1 r)
         trim = trim1 . trim1
         trim1 = dropWhile isSpace . reverse
-        spl p = let (n, v) = span (/= ':') p in (trim n, trim v)
+        spl p = let (n, v) = span (/= ':') p in (trim n, trim $ drop 1 v)
 
 basicPlay :: (GDL.State -> GGP a Move)
           -> Maybe [(Role, Move)] -> GGP a GGPReply
@@ -161,10 +165,15 @@ doStart :: String -> Term -> Database -> Int -> Int -> Bool -> Player a
         -> IORef (MatchMap a) -> PlayerParams -> ResourceT IO GGPReply
 doStart matchid role db sclk pclk logging player rmatchmap params = do
   let st = initState db
+      feas = feasible db role
+      nfeas = S.size feas
+  liftIO $ putStrLn $ "\n\n\nFEASIBLE MOVES (" ++ show nfeas ++
+    "):\n" ++ show feas ++ "\n\n\n"
   gen <- liftIO $ newStdGen
   let extra = initExtra player params
       rs = roles db
-      match = Match db st role rs (length rs) Nothing sclk pclk extra logging
+      match = Match db st role rs (length rs) nfeas
+                    Nothing sclk pclk extra logging
   matchmap <- liftIO $ readIORef rmatchmap
   rmatch <- liftIO $ newIORef (gen, match)
   liftIO $ writeIORef rmatchmap (M.insert matchid rmatch matchmap)
