@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, TemplateHaskell #-}
-module Main where
+module AlphaBeta (alphaBetaPlayer) where
 
 import Control.Monad
 import Data.Function (on)
@@ -67,6 +67,6 @@ bestMove st0 = do
   logMsg $ "Moves and values: " ++ show avs
   return $ fst $ maximumBy (compare `on` snd) avs
 
-main :: IO ()
-main = defaultMain $ def { initExtra = 0
-                         , handlePlay = basicPlay bestMove }
+alphaBetaPlayer :: Player Int
+alphaBetaPlayer = def { initExtra = 0
+                      , handlePlay = basicPlay bestMove }

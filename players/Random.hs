@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module Main where
+module Random (randomPlayer) where
 
 import GGP.Player
 import GGP.Utils
@@ -13,5 +13,5 @@ randomMove st = do
   idx <- getRandomR (0, nmoves-1)
   return $ moves !! idx
 
-main :: IO ()
-main = defaultMain $ def { handlePlay = basicPlay randomMove }
+randomPlayer :: Player ()
+randomPlayer = def { handlePlay = basicPlay randomMove }

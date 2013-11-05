@@ -60,47 +60,17 @@ executable manual-player
   main-is:             manual-player.hs
   ghc-options:         -Wall -fwarn-tabs
 
-executable legal-player
+executable player
   build-depends:       ggp,
                        base                     >= 4.3        && < 5,
+                       containers               >= 0.5.0.0    && < 0.6,
                        data-default             >= 0.5.3      && < 0.6,
                        transformers             >= 0.3        && < 0.4
   hs-source-dirs:      players
-  main-is:             legal-player.hs
-  ghc-options:         -Wall -fwarn-tabs
-
-executable random-player
-  build-depends:       ggp,
-                       base                     >= 4.3        && < 5,
-                       data-default             >= 0.5.3      && < 0.6,
-                       transformers             >= 0.3        && < 0.4
-  hs-source-dirs:      players
-  main-is:             random-player.hs
-  ghc-options:         -Wall -fwarn-tabs
-
-executable deliberation-player
-  build-depends:       ggp,
-                       base                     >= 4.3        && < 5,
-                       data-default             >= 0.5.3      && < 0.6,
-                       transformers             >= 0.3        && < 0.4
-  hs-source-dirs:      players
-  main-is:             deliberation-player.hs
-  ghc-options:         -Wall -fwarn-tabs
-
-executable minimax-player
-  build-depends:       ggp,
-                       base                     >= 4.3        && < 5,
-                       data-default             >= 0.5.3      && < 0.6,
-                       transformers             >= 0.3        && < 0.4
-  hs-source-dirs:      players
-  main-is:             minimax-player.hs
-  ghc-options:         -Wall -fwarn-tabs
-
-executable alpha-beta-player
-  build-depends:       ggp,
-                       base                     >= 4.3        && < 5,
-                       data-default             >= 0.5.3      && < 0.6,
-                       transformers             >= 0.3        && < 0.4
-  hs-source-dirs:      players
-  main-is:             alpha-beta-player.hs
+  main-is:             player.hs
+  other-modules:       Legal
+                       Random
+                       Deliberation
+                       Minimax
+                       AlphaBeta
   ghc-options:         -Wall -fwarn-tabs

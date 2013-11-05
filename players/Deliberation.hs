@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module Main where
+module Deliberation (deliberationPlayer) where
 
 import Data.Function (on)
 import Data.List (maximumBy)
@@ -21,5 +21,5 @@ bestMove st0 = do
   liftIO $ putStrLn $ "Moves and values: " ++ show avs
   return $ fst $ maximumBy (compare `on` snd) avs
 
-main :: IO ()
-main = defaultMain $ def { handlePlay = basicPlay bestMove }
+deliberationPlayer :: Player ()
+deliberationPlayer = def { handlePlay = basicPlay bestMove }

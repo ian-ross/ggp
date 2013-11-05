@@ -1,8 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable, RecordWildCards #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
-       , def, defaultMain, basicPlay
+       , PlayerArgs (..)
+       , def, defaultMain, runPlayer, basicPlay
        , liftIO, get, put, gets, modify
        , logMsg
        , getRandom, getRandoms, getRandomR, getRandomRs ) where
@@ -75,24 +77,29 @@ instance Default a => Default (Player a) where
 
 type MatchMap a = M.Map String (IORef (StdGen, Match a))
 
-data PlayerArgs = PlayerArgs { port :: Int, log :: Bool }
+data PlayerArgs = PlayerArgs { player :: String, port :: Int, log :: Bool }
                 deriving (Show, Data, Typeable)
 
 playerArgs :: Annotate Ann
-playerArgs = record PlayerArgs { port = 9147, log = False }
-             [ port := 9147 += help "Network port"
-             , log := False += help "Message logging"]
+playerArgs = record PlayerArgs { player = "legal", port = 9147, log = False }
+             [ player := "legal" += help "Player type"
+             , port   := 9147    += help "Network port"
+             , log    := False   += help "Message logging"]
              += summary "Generic player interface"
              += program "player"
 
-defaultMain :: Player a -> IO ()
-defaultMain player = do
+defaultMain :: (PlayerArgs -> IO ()) -> IO ()
+defaultMain f = cmdArgs_ playerArgs >>= f
+
+runPlayer :: Player a -> IO ()
+runPlayer p = do
   pas <- cmdArgs_ playerArgs
   matchInfo <- newIORef M.empty
-  putStrLn $ "Running on port " ++ show (port pas)
-  run (port pas) (handler (log pas) matchInfo player)
+  putStrLn $ "Running on port " ++ show (port pas) ++ " (" ++ player pas ++ ")"
+  run (port pas) (handler (log pas) matchInfo p)
 
-basicPlay :: (GDL.State -> GGP a Move) -> Maybe [(Role, Move)] -> GGP a GGPReply
+basicPlay :: (GDL.State -> GGP a Move)
+          -> Maybe [(Role, Move)] -> GGP a GGPReply
 basicPlay bestMove _mmoves = do
   Match {..} <- get
   liftIO $ putStrLn $ "State: " ++

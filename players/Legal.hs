@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module Main where
+module Legal (legalPlayer) where
 
 import GGP.Player
 import GGP.Utils
@@ -11,5 +11,5 @@ firstMove st = do
   let moves = legal matchDB st matchRole
   return $ head moves
 
-main :: IO ()
-main = defaultMain $ def { handlePlay = basicPlay firstMove }
+legalPlayer :: Player ()
+legalPlayer = def { handlePlay = basicPlay firstMove }
