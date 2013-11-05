@@ -1,4 +1,7 @@
+{-# LANGUAGE RankNTypes, ImpredicativeTypes #-}
 module Main where
+
+import Data.List
 
 import GGP.Player
 import Legal
@@ -13,14 +16,20 @@ import GoalAlphaBeta
 
 main :: IO ()
 main = defaultMain $ \pas -> do
-  case player pas of
-    "legal"                 -> runPlayer legalPlayer
-    "random"                -> runPlayer randomPlayer
-    "deliberation"          -> runPlayer deliberationPlayer
-    "minimax"               -> runPlayer minimaxPlayer
-    "alpha-beta"            -> runPlayer alphaBetaPlayer
-    "depth-limited-minimax" -> runPlayer depthLimitedMinimaxPlayer
-    "mobility-minimax"      -> runPlayer mobilityMinimaxPlayer
-    "mobility-alpha-beta"   -> runPlayer mobilityAlphaBetaPlayer
-    "goal-alpha-beta"       -> runPlayer goalAlphaBetaPlayer
-    _                       -> error "Invalid player type"
+  case lookup (player pas) availablePlayers of
+    Just p  -> p
+    _       -> error $ "Invalid player type.\nAvailable types: " ++
+                  (intercalate ", " $ map fst availablePlayers)
+
+availablePlayers :: [([Char], IO ())]
+availablePlayers = [
+    ("legal",                 runPlayer legalPlayer),
+    ("random",                runPlayer randomPlayer),
+    ("deliberation",          runPlayer deliberationPlayer),
+    ("minimax",               runPlayer minimaxPlayer),
+    ("alpha-beta",            runPlayer alphaBetaPlayer),
+    ("depth-limited-minimax", runPlayer depthLimitedMinimaxPlayer),
+    ("mobility-minimax",      runPlayer mobilityMinimaxPlayer),
+    ("mobility-alpha-beta",   runPlayer mobilityAlphaBetaPlayer),
+    ("goal-alpha-beta",       runPlayer goalAlphaBetaPlayer)
+  ]
