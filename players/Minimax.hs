@@ -1,7 +1,6 @@
 {-# LANGUAGE RecordWildCards, TemplateHaskell #-}
 module Minimax (minimaxPlayer) where
 
-import Control.Monad
 import Data.Function (on)
 import Data.List (intercalate, maximumBy, delete)
 import GGP.Player
@@ -10,8 +9,8 @@ import Language.GDL
 
 type Game a = GGP Int a
 
-modLevel :: Int -> Game ()
-modLevel delta = modify (\m -> m { matchExtra = matchExtra m + delta })
+modNest :: Int -> Game ()
+modNest delta = modify (\m -> m { matchExtra = matchExtra m + delta })
 
 boundedMinimum :: [Integer] -> Integer
 boundedMinimum [] = 100
@@ -32,9 +31,9 @@ minscore st m = do
   let oppRole = head $ delete matchRole $ roles matchDB
   let as = legal matchDB st oppRole
       poss = map (\a -> applyMoves matchDB st [(matchRole, m), (oppRole, a)]) as
-  modLevel 1
+  modNest 1
   ss <- mapM maxscore poss
-  modLevel (-1)
+  modNest (-1)
   let retval = boundedMinimum ss
   logMsg $ (replicate matchExtra ' ') ++ "minscore returns " ++ show retval
   return retval
@@ -47,9 +46,13 @@ maxscore st = do
   retval <- if isTerminal matchDB st
             then return $ goal matchDB st matchRole
             else do
-              modLevel 1
-              ss <- mapM (minscore st) $ legal matchDB st matchRole
-              modLevel (-1)
+              modNest 1
+              let as = legal matchDB st matchRole
+                  poss = map (\a -> applyMoves matchDB st [(matchRole, a)]) as
+              ss <- if matchNRoles > 1
+                    then mapM (minscore st) as
+                    else mapM maxscore poss
+              modNest (-1)
               return $ boundedMaximum ss
   logMsg $ (replicate matchExtra ' ') ++ "maxscore returns " ++ show retval
   return retval
@@ -58,10 +61,13 @@ bestMove :: State -> Game Move
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
-  vs <- forM as (minscore st0)
+      poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
+  vs <- if matchNRoles > 1
+        then mapM (minscore st0) as
+        else mapM maxscore poss
   let avs = zip as vs
   logMsg $ "Moves and values: " ++ show avs
   return $ fst $ maximumBy (compare `on` snd) avs
 
 minimaxPlayer :: Player Int
-minimaxPlayer = def { initExtra = 0, handlePlay = basicPlay bestMove }
+minimaxPlayer = def { initExtra = const 0, handlePlay = basicPlay bestMove }

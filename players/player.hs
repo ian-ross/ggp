@@ -6,13 +6,15 @@ import Random
 import Deliberation
 import Minimax
 import AlphaBeta
+import DepthLimitedMinimax
 
 main :: IO ()
 main = defaultMain $ \pas -> do
   case player pas of
-    "legal"        -> runPlayer legalPlayer
-    "random"       -> runPlayer randomPlayer
-    "deliberation" -> runPlayer deliberationPlayer
-    "minimax"      -> runPlayer minimaxPlayer
-    "alphabeta"    -> runPlayer alphaBetaPlayer
-    _              -> error "Invalid player type"
+    "legal"                 -> runPlayer legalPlayer
+    "random"                -> runPlayer randomPlayer
+    "deliberation"          -> runPlayer deliberationPlayer
+    "minimax"               -> runPlayer minimaxPlayer
+    "alphabeta"             -> runPlayer alphaBetaPlayer
+    "depth-limited-minimax" -> runPlayer depthLimitedMinimaxPlayer
+    _                       -> error "Invalid player type"

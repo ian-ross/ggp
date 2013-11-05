@@ -3,9 +3,9 @@
 module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
-       , PlayerArgs (..)
-       , def, defaultMain, runPlayer, basicPlay
-       , liftIO, get, put, gets, modify
+       , PlayerArgs (..), PlayerParams, getParam
+       , Default (..), defaultMain, runPlayer, basicPlay
+       , liftIO, get, put, gets, modify, modExtra
        , logMsg
        , getRandom, getRandoms, getRandomR, getRandomRs ) where
 
@@ -37,6 +37,7 @@ data Match a = Match { matchDB :: Database
                      , matchState :: GDL.State
                      , matchRole :: Role
                      , matchRoles :: [Role]
+                     , matchNRoles :: Int
                      , matchLastMoves :: Maybe [(Role, Move)]
                      , matchStartClock :: Int
                      , matchPlayClock :: Int
@@ -58,33 +59,46 @@ gets f = lift (liftM f CMTS.get)
 modify :: Monad m => (s -> s) -> RandT g (StateT s m) ()
 modify f = lift (CMTS.modify f)
 
+modExtra :: Monad m => (a -> a) -> RandT g (StateT (Match a) m) ()
+modExtra f = modify $ \st -> st { matchExtra = f (matchExtra st) }
+
 logMsg :: String -> GGP a ()
 logMsg msg = do
   logging <- gets matchLogging
   when logging $ liftIO $ putStrLn msg
 
-data Player a = Player { initExtra :: a
+data Player a = Player { initExtra :: PlayerParams -> a
                        , handleStart :: GGP a GGPReply
                        , handlePlay :: Maybe [(Role, Move)] -> GGP a GGPReply
                        , handleStop :: Maybe [(Role, Move)] -> GGP a GGPReply
                        }
 
 instance Default a => Default (Player a) where
-  def = Player { initExtra = def
+  def = Player { initExtra = const def
                , handleStart = return Ready
                , handleStop = const (return Done)
                , handlePlay = const (return Ready) }
 
 type MatchMap a = M.Map String (IORef (StdGen, Match a))
 
-data PlayerArgs = PlayerArgs { player :: String, port :: Int, log :: Bool }
+data PlayerArgs = PlayerArgs { player :: String
+                             , port :: Int
+                             , log :: Bool
+                             , params :: String }
                 deriving (Show, Data, Typeable)
 
+type PlayerParams = M.Map String String
+
+getParam :: String -> M.Map String String -> Maybe String
+getParam = M.lookup
+
 playerArgs :: Annotate Ann
-playerArgs = record PlayerArgs { player = "legal", port = 9147, log = False }
+playerArgs = record PlayerArgs { player = "legal", port = 9147
+                               , log = False, params = "" }
              [ player := "legal" += help "Player type"
              , port   := 9147    += help "Network port"
-             , log    := False   += help "Message logging"]
+             , log    := False   += help "Message logging"
+             , params := ""      += help "Player-specific parameters"]
              += summary "Generic player interface"
              += program "player"
 
@@ -96,7 +110,16 @@ runPlayer p = do
   pas <- cmdArgs_ playerArgs
   matchInfo <- newIORef M.empty
   putStrLn $ "Running on port " ++ show (port pas) ++ " (" ++ player pas ++ ")"
-  run (port pas) (handler (log pas) matchInfo p)
+  run (port pas) (handler (log pas) (processParams $ params pas) matchInfo p)
+
+processParams :: String -> PlayerParams
+processParams = M.fromList . map (spl . trim) . chunks
+  where chunks [] = []
+        chunks ps = let (p,r) = span (/= ',') ps
+                    in p : chunks (drop 1 r)
+        trim = trim1 . trim1
+        trim1 = dropWhile isSpace . reverse
+        spl p = let (n, v) = span (/= ':') p in (trim n, trim v)
 
 basicPlay :: (GDL.State -> GGP a Move)
           -> Maybe [(Role, Move)] -> GGP a GGPReply
@@ -111,8 +134,8 @@ basicPlay bestMove _mmoves = do
   liftIO $ putStrLn $ "Making move: " ++ printMach move
   return $ Action move
 
-handler :: Bool -> IORef (MatchMap a) -> Player a -> Application
-handler logging rmatchmap player req = do
+handler :: Bool -> PlayerParams -> IORef (MatchMap a) -> Player a -> Application
+handler logging params rmatchmap player req = do
   ereq <- ggpParse req
   when logging $
     liftIO $ putStrLn $ "REQ: " ++ show ereq
@@ -127,7 +150,7 @@ handler logging rmatchmap player req = do
           case r of
             Stop matchid moves -> doStop matchid moves player matchmap
             Start matchid role db sclk pclk ->
-              doStart matchid role db sclk pclk logging player rmatchmap
+              doStart matchid role db sclk pclk logging player rmatchmap params
             Play matchid moves -> doPlay matchid moves player matchmap
             Info -> error "Oops"
       when logging $
@@ -135,12 +158,13 @@ handler logging rmatchmap player req = do
       ggpReply response
 
 doStart :: String -> Term -> Database -> Int -> Int -> Bool -> Player a
-        -> IORef (MatchMap a) -> ResourceT IO GGPReply
-doStart matchid role db sclk pclk logging player rmatchmap = do
+        -> IORef (MatchMap a) -> PlayerParams -> ResourceT IO GGPReply
+doStart matchid role db sclk pclk logging player rmatchmap params = do
   let st = initState db
   gen <- liftIO $ newStdGen
-  let extra = initExtra player
-      match = Match db st role (roles db) Nothing sclk pclk extra logging
+  let extra = initExtra player params
+      rs = roles db
+      match = Match db st role rs (length rs) Nothing sclk pclk extra logging
   matchmap <- liftIO $ readIORef rmatchmap
   rmatch <- liftIO $ newIORef (gen, match)
   liftIO $ writeIORef rmatchmap (M.insert matchid rmatch matchmap)

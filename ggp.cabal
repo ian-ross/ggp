@@ -73,4 +73,5 @@ executable player
                        Deliberation
                        Minimax
                        AlphaBeta
+                       DepthLimitedMinimax
   ghc-options:         -Wall -fwarn-tabs

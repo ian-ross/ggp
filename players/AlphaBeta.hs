@@ -10,8 +10,8 @@ import Language.GDL
 
 type Game a = GGP Int a
 
-modLevel :: Int -> Game ()
-modLevel delta = modify (\m -> m { matchExtra = matchExtra m + delta })
+modNest :: Int -> Game ()
+modNest delta = modify (\m -> m { matchExtra = matchExtra m + delta })
 
 minscore :: Integer -> Integer -> State -> Move -> Game Integer
 minscore alpha beta st m = do
@@ -19,21 +19,25 @@ minscore alpha beta st m = do
   logMsg $ (replicate matchExtra ' ') ++
     "minscore: st=" ++ (intercalate ", " $ map prettyPrint st) ++
     " m=" ++ prettyPrint m
-  let oppRole = head $ delete matchRole $ roles matchDB
-      acts = legal matchDB st oppRole
-      go _alp bet [] = return bet
-      go alp bet (a:as) = do
-        let poss = applyMoves matchDB st [(matchRole, m), (oppRole, a)]
-        s <- maxscore alp bet poss
-        let bet' = bet `min` s
-        if bet' <= alp
-          then return alp
-          else go alp bet as
-  modLevel 1
-  retval <- go alpha beta acts
-  modLevel (-1)
-  logMsg $ (replicate matchExtra ' ') ++ "minscore returns " ++ show retval
-  return retval
+  let otherRoles = delete matchRole $ roles matchDB
+  if null otherRoles
+    then return 0
+    else do
+    let orole = head otherRoles
+        acts = legal matchDB st orole
+        go _alp bet [] = return bet
+        go alp bet (a:as) = do
+          let poss = applyMoves matchDB st [(matchRole, m), (orole, a)]
+          s <- maxscore alp bet poss
+          let bet' = bet `min` s
+          if bet' <= alp
+            then return alp
+            else go alp bet as
+    modNest 1
+    retval <- go alpha beta acts
+    modNest (-1)
+    logMsg $ (replicate matchExtra ' ') ++ "minscore returns " ++ show retval
+    return retval
 
 maxscore :: Integer -> Integer -> State -> Game Integer
 maxscore alpha beta st = do
@@ -43,7 +47,7 @@ maxscore alpha beta st = do
   retval <- if isTerminal matchDB st
             then return $ goal matchDB st matchRole
             else do
-              modLevel 1
+              modNest 1
               let acts = legal matchDB st matchRole
                   go alp _bet [] = return alp
                   go alp bet (a:as) = do
@@ -53,7 +57,7 @@ maxscore alpha beta st = do
                       then return bet
                       else go alp' bet as
               res <- go alpha beta acts
-              modLevel (-1)
+              modNest (-1)
               return res
   logMsg $ (replicate matchExtra ' ') ++ "maxscore returns " ++ show retval
   return retval
@@ -62,11 +66,12 @@ bestMove :: State -> Game Move
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
+      poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
   vs <- forM as (minscore 0 100 st0)
   let avs = zip as vs
   logMsg $ "Moves and values: " ++ show avs
   return $ fst $ maximumBy (compare `on` snd) avs
 
 alphaBetaPlayer :: Player Int
-alphaBetaPlayer = def { initExtra = 0
+alphaBetaPlayer = def { initExtra = const 0
                       , handlePlay = basicPlay bestMove }
