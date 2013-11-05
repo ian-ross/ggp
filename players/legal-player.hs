@@ -1,21 +1,15 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Data.List (intercalate)
 import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-playLegal :: Maybe [(Role, Move)] -> GGP () GGPReply
-playLegal _mmoves = do
+firstMove :: State -> GGP () Move
+firstMove st = do
   Match {..} <- get
-  liftIO $ putStrLn $ "State: " ++ prettyPrint matchState
-  let moves = legal matchDB matchState matchRole
-  liftIO $ putStrLn $ "Legal moves:\n" ++
-    (intercalate "\n" $ map prettyPrint moves)
-  let move = head moves
-  liftIO $ putStrLn $ "Making move: " ++ prettyPrint move
-  return $ Action move
+  let moves = legal matchDB st matchRole
+  return $ head moves
 
 main :: IO ()
-main = defaultMain $ def { handlePlay = playLegal }
+main = defaultMain $ def { handlePlay = basicPlay firstMove }

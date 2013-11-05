@@ -13,18 +13,6 @@ type Game a = GGP Int a
 modLevel :: Int -> Game ()
 modLevel delta = modify (\m -> m { matchExtra = matchExtra m + delta })
 
-playAlphaBeta :: Maybe [(Role, Move)] -> Game GGPReply
-playAlphaBeta _mmoves = do
-  Match {..} <- get
-  liftIO $ putStrLn $ "State: " ++
-    (intercalate ", " $ map prettyPrint matchState)
-  let moves = legal matchDB matchState matchRole
-  liftIO $ putStrLn $ "Legal moves: " ++
-    (intercalate ", " $ map printMach moves)
-  move <- bestMove matchState
-  liftIO $ putStrLn $ "Making move: " ++ printMach move
-  return $ Action move
-
 minscore :: Integer -> Integer -> State -> Move -> Game Integer
 minscore alpha beta st m = do
   Match {..} <- get
@@ -70,7 +58,6 @@ maxscore alpha beta st = do
   logMsg $ (replicate matchExtra ' ') ++ "maxscore returns " ++ show retval
   return retval
 
-
 bestMove :: State -> Game Move
 bestMove st0 = do
   Match {..} <- get
@@ -82,4 +69,4 @@ bestMove st0 = do
 
 main :: IO ()
 main = defaultMain $ def { initExtra = 0
-                         , handlePlay = playAlphaBeta }
+                         , handlePlay = basicPlay bestMove }

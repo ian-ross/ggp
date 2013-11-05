@@ -1,23 +1,17 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import Data.List (intercalate)
 import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-playRandom :: Maybe [(Role, Move)] -> GGP () GGPReply
-playRandom _mmoves = do
+randomMove :: State -> GGP () Move
+randomMove st = do
   Match {..} <- get
-  liftIO $ putStrLn $ "State: " ++ prettyPrint matchState
-  let moves = legal matchDB matchState matchRole
+  let moves = legal matchDB st matchRole
       nmoves = length moves
-  liftIO $ putStrLn $ "Legal moves:\n" ++
-    (intercalate "\n" $ map prettyPrint moves)
   idx <- getRandomR (0, nmoves-1)
-  let move = moves !! idx
-  liftIO $ putStrLn $ "Making move: " ++ prettyPrint move
-  return $ Action move
+  return $ moves !! idx
 
 main :: IO ()
-main = defaultMain $ def { handlePlay = playRandom }
+main = defaultMain $ def { handlePlay = basicPlay randomMove }

@@ -1,8 +1,8 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, RecordWildCards #-}
 module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
-       , def, defaultMain
+       , def, defaultMain, basicPlay
        , liftIO, get, put, gets, modify
        , logMsg
        , getRandom, getRandoms, getRandomR, getRandomRs ) where
@@ -18,6 +18,7 @@ import qualified Control.Monad.Trans.State as CMTS
 import Data.Char
 import Data.Default
 import Data.IORef
+import Data.List (intercalate)
 import qualified Data.Map as M
 import Network.HTTP.Types.Status
 import Network.Wai
@@ -90,6 +91,18 @@ defaultMain player = do
   matchInfo <- newIORef M.empty
   putStrLn $ "Running on port " ++ show (port pas)
   run (port pas) (handler (log pas) matchInfo player)
+
+basicPlay :: (GDL.State -> GGP a Move) -> Maybe [(Role, Move)] -> GGP a GGPReply
+basicPlay bestMove _mmoves = do
+  Match {..} <- get
+  liftIO $ putStrLn $ "State: " ++
+    (intercalate ", " $ map prettyPrint matchState)
+  let moves = legal matchDB matchState matchRole
+  liftIO $ putStrLn $ "Legal moves: " ++
+    (intercalate ", " $ map printMach moves)
+  move <- bestMove matchState
+  liftIO $ putStrLn $ "Making move: " ++ printMach move
+  return $ Action move
 
 handler :: Bool -> IORef (MatchMap a) -> Player a -> Application
 handler logging rmatchmap player req = do

@@ -23,18 +23,6 @@ boundedMaximum [] = 0
 boundedMaximum (100:_) = 100
 boundedMaximum (x:xs) = x `max` boundedMaximum xs
 
-playMinimax :: Maybe [(Role, Move)] -> Game GGPReply
-playMinimax _mmoves = do
-  Match {..} <- get
-  liftIO $ putStrLn $ "State: " ++
-    (intercalate ", " $ map prettyPrint matchState)
-  let moves = legal matchDB matchState matchRole
-  liftIO $ putStrLn $ "Legal moves: " ++
-    (intercalate ", " $ map printMach moves)
-  move <- bestMove matchState
-  liftIO $ putStrLn $ "Making move: " ++ printMach move
-  return $ Action move
-
 minscore :: State -> Move -> Game Integer
 minscore st m = do
   Match {..} <- get
@@ -77,4 +65,4 @@ bestMove st0 = do
 
 main :: IO ()
 main = defaultMain $ def { initExtra = 0
-                         , handlePlay = playMinimax }
+                         , handlePlay = basicPlay bestMove }
