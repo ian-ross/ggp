@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes, ImpredicativeTypes #-}
 module Main where
 
 import Data.List
@@ -21,15 +20,14 @@ main = defaultMain $ \pas -> do
     _       -> error $ "Invalid player type.\nAvailable types: " ++
                   (intercalate ", " $ map fst availablePlayers)
 
-availablePlayers :: [([Char], IO ())]
-availablePlayers = [
-    ("legal",                 runPlayer legalPlayer),
-    ("random",                runPlayer randomPlayer),
-    ("deliberation",          runPlayer deliberationPlayer),
-    ("minimax",               runPlayer minimaxPlayer),
-    ("alpha-beta",            runPlayer alphaBetaPlayer),
-    ("depth-limited-minimax", runPlayer depthLimitedMinimaxPlayer),
-    ("mobility-minimax",      runPlayer mobilityMinimaxPlayer),
-    ("mobility-alpha-beta",   runPlayer mobilityAlphaBetaPlayer),
-    ("goal-alpha-beta",       runPlayer goalAlphaBetaPlayer)
-  ]
+availablePlayers :: [(String, IO ())]
+availablePlayers =
+  [ ("legal",                 runPlayer legalPlayer)
+  , ("random",                runPlayer randomPlayer)
+  , ("deliberation",          runPlayer deliberationPlayer)
+  , ("minimax",               runPlayer minimaxPlayer)
+  , ("alpha-beta",            runPlayer alphaBetaPlayer)
+  , ("depth-limited-minimax", runPlayer depthLimitedMinimaxPlayer)
+  , ("mobility-minimax",      runPlayer mobilityMinimaxPlayer)
+  , ("mobility-alpha-beta",   runPlayer mobilityAlphaBetaPlayer)
+  , ("goal-alpha-beta",       runPlayer goalAlphaBetaPlayer) ]
