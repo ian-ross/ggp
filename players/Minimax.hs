@@ -21,11 +21,10 @@ makeMove t st = do
   logMsg $ (replicate matchExtra ' ') ++
     "makeMove " ++ show t ++ ": st=" ++ (intercalate ", " $ map prettyPrint st)
 
-  let 
-      oppRole = head $ delete matchRole $ roles matchDB
+  let oppRole = head $ delete matchRole $ roles matchDB
       (nextt, findRes, role) = case t of
-            Max -> (Min, maximum, matchRole)
-            Min -> (Max, minimum, oppRole)
+        Max -> (Min, maximum, matchRole)
+        Min -> (Max, minimum, oppRole)
       as = legal matchDB st role
       poss = map (\a -> applyMoves matchDB st [(role, a)]) as
 
@@ -38,17 +37,15 @@ makeMove t st = do
               when (matchExtra == 0) $ logMsg $ "Moves and values: " ++ show ss
               return $ findRes ss
 
-  logMsg $ (replicate matchExtra ' ') ++ "makeMove " ++ show t ++ " returns " ++ show retval
+  logMsg $ (replicate matchExtra ' ') ++ "makeMove " ++ show t ++
+    " returns " ++ show retval
   return retval
-
-
 
 bestMove :: State -> Game Move
 bestMove st0 = do
   Match {..} <- get
-  let
-    as = legal matchDB st0 matchRole
-    poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
+  let as = legal matchDB st0 matchRole
+      poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
   ss <- mapM (makeMove Max) poss
   return $ fst $ maximumBy (compare `on` snd) $ zip as ss
 
