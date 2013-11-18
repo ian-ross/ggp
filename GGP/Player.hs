@@ -5,7 +5,7 @@ module GGP.Player
        , GGPRequest (..), GGPReply (..)
        , PlayerArgs (..), PlayerParams, getParam
        , Default (..), defaultMain, runPlayer, basicPlay
-       , liftIO, get, put, gets, modify, modExtra
+       , liftIO, get, put, gets, modify, modExtra, elapsedTime
        , logMsg
        , getRandom, getRandoms, getRandomR, getRandomRs ) where
 
@@ -23,6 +23,7 @@ import Data.IORef
 import Data.List (intercalate)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import Data.Time
 import Network.HTTP.Types.Status
 import Network.Wai
 import Network.Wai.Handler.Warp
@@ -43,6 +44,7 @@ data Match a = Match { matchDB :: Database
                      , matchLastMoves :: Maybe [(Role, Move)]
                      , matchStartClock :: Int
                      , matchPlayClock :: Int
+                     , matchStartTime :: UTCTime
                      , matchExtra :: a
                      , matchLogging :: Bool
                      } deriving (Show)
@@ -111,9 +113,10 @@ runPlayer :: Player a -> IO ()
 runPlayer p = do
   pas <- cmdArgs_ playerArgs
   matchInfo <- newIORef M.empty
-  putStrLn $ "Running on port " ++ show (port pas) ++ " (" ++ player pas ++ ")"
+  --putStrLn $ "Running on port " ++ show (port pas) ++ " (" ++ player pas ++ ")"
   let ps = processParams $ params pas
-  putStrLn $ "Parameters: " ++ show ps
+  --putStrLn $ "Parameters: " ++
+  --  (intercalate "," $ map (\(k,v) -> k ++ "=" ++ v) $ M.toList ps)
   run (port pas) (handler (log pas) ps matchInfo p)
 
 processParams :: String -> PlayerParams
@@ -129,13 +132,13 @@ basicPlay :: (GDL.State -> GGP a Move)
           -> Maybe [(Role, Move)] -> GGP a GGPReply
 basicPlay bestMove _mmoves = do
   Match {..} <- get
-  liftIO $ putStrLn $ "State: " ++
-    (intercalate ", " $ map prettyPrint matchState)
+  --liftIO $ putStrLn $ "State: " ++
+  --  (intercalate ", " $ map prettyPrint matchState)
   let moves = legal matchDB matchState matchRole
-  liftIO $ putStrLn $ "Legal moves: " ++
-    (intercalate ", " $ map printMach moves)
+  --liftIO $ putStrLn $ "Legal moves: " ++
+  --  (intercalate ", " $ map printMach moves)
   move <- bestMove matchState
-  liftIO $ putStrLn $ "Making move: " ++ printMach move
+  --liftIO $ putStrLn $ "Making move: " ++ printMach move
   return $ Action move
 
 handler :: Bool -> PlayerParams -> IORef (MatchMap a) -> Player a -> Application
@@ -167,13 +170,12 @@ doStart matchid role db sclk pclk logging player rmatchmap params = do
   let st = initState db
       feas = feasible db role
       nfeas = S.size feas
-  liftIO $ putStrLn $ "\n\n\nFEASIBLE MOVES (" ++ show nfeas ++
-    "):\n" ++ show feas ++ "\n\n\n"
   gen <- liftIO $ newStdGen
+  now <- liftIO $ getCurrentTime
   let extra = initExtra player params
       rs = roles db
       match = Match db st role rs (length rs) nfeas
-                    Nothing sclk pclk extra logging
+                    Nothing sclk pclk now extra logging
   matchmap <- liftIO $ readIORef rmatchmap
   rmatch <- liftIO $ newIORef (gen, match)
   liftIO $ writeIORef rmatchmap (M.insert matchid rmatch matchmap)
@@ -186,10 +188,13 @@ doPlay :: String -> Term -> Player a -> MatchMap a -> ResourceT IO GGPReply
 doPlay matchid moves player matchmap = do
   let rmatch = matchmap M.! matchid
   (gen, m) <- liftIO $ readIORef rmatch
+  now <- liftIO $ getCurrentTime
   let zms = zipMoves (matchRoles m) moves
       st = matchState m
       st' = maybe st (applyMoves (matchDB m) st) zms
-      match' = m { matchState = st', matchLastMoves = zms }
+      match' = m { matchState = st',
+                   matchLastMoves = zms,
+                   matchStartTime = now }
       play = handlePlay player zms
   ((resp, gen'), match'') <- liftIO $ runStateT (runRandT play gen) match'
   liftIO $ writeIORef rmatch (gen', match'')
@@ -216,3 +221,24 @@ ok rep = string status200 (respHdrs rep) rep
 ggpReply :: Monad m => GGPReply -> m Response
 ggpReply (Action term) = ok $ map toLower $ printMach term
 ggpReply rep = ok $ map toLower $ show rep
+
+elapsedTime :: GGP a Double
+elapsedTime = do
+  start <- gets matchStartTime
+  now <- liftIO $ getCurrentTime
+  return $ realToFrac $ diffUTCTime now start
+
+-- NOT GOING TO WORK BECAUSE OF MONAD STACKING...
+-- untilElapsed :: Double -> Move -> ((Move -> GGP a ()) -> GGP a Move)
+--              -> GGP a Move
+-- untilElapsed leeway fallback f = do
+--   elapsed <- elapsedTime
+--   let remaining = round $ 1000000 * (elapsed - leeway)
+--   var <- liftIO $ newSV fallback
+--   let save m = liftIO $ writeSV var m
+--   bestMove <- f save
+--   save bestMove
+-- --  liftIO $ threadDelay remaining
+-- --  liftIO $ killThread tid
+--   ret <- liftIO $ readSV var
+--   return ret

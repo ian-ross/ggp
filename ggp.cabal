@@ -35,8 +35,10 @@ library
                        pretty                   >= 1.1.1.0    && < 1.2,
                        random                   >= 1.0.1.1    && < 1.1,
                        resourcet                >= 0.4.8      && < 0.5,
+                       SafeSemaphore            >= 0.9        && < 1.0,
                        sexp                     >= 0.7        && < 0.8,
                        template-haskell         >= 2.8        && < 2.9,
+                       time                     >= 1.4.0.1    && < 1.5,
                        transformers             >= 0.3        && < 0.4,
                        wai                      >= 1.4.0.2    && < 1.5,
                        wai-util                 >= 0.6        && < 0.7,
@@ -65,7 +67,8 @@ executable player
                        base                     >= 4.3        && < 5,
                        containers               >= 0.5.0.0    && < 0.6,
                        data-default             >= 0.5.3      && < 0.6,
-                       transformers             >= 0.3        && < 0.4
+                       transformers             >= 0.3        && < 0.4,
+                       vector                   >= 0.10.9.1   && < 0.11
   hs-source-dirs:      players
   main-is:             player.hs
   other-modules:       Legal
@@ -77,4 +80,5 @@ executable player
                        MobilityMinimax
                        MobilityAlphaBeta
                        GoalAlphaBeta
+                       MonteCarlo
   ghc-options:         -Wall -fwarn-tabs -O2

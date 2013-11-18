@@ -12,6 +12,7 @@ import DepthLimitedMinimax
 import MobilityMinimax
 import MobilityAlphaBeta
 import GoalAlphaBeta
+import MonteCarlo
 
 main :: IO ()
 main = defaultMain $ \pas -> do
@@ -30,4 +31,5 @@ availablePlayers =
   , ("depth-limited-minimax", runPlayer depthLimitedMinimaxPlayer)
   , ("mobility-minimax",      runPlayer mobilityMinimaxPlayer)
   , ("mobility-alpha-beta",   runPlayer mobilityAlphaBetaPlayer)
-  , ("goal-alpha-beta",       runPlayer goalAlphaBetaPlayer) ]
+  , ("goal-alpha-beta",       runPlayer goalAlphaBetaPlayer)
+  , ("monte-carlo",           runPlayer monteCarloPlayer) ]
