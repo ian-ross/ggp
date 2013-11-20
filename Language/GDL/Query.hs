@@ -24,7 +24,12 @@ qeval' :: STRef s Integer -> Database -> Query -> [Substitution]
        -> ST s [Substitution]
 qeval' _ _ Pass frames = return frames
 qeval' counter db (Query struct) frames = fmap concat . mapM applied $ frames
-  where applied frame = fmap concat . mapM (apply counter db frame struct) $ db
+  where applied frame = fmap concat . mapM (apply counter db frame struct) $
+                        cheat struct db
+        cheat (Atom s) db = db M.! s
+        cheat (Compound ((Atom s):_)) db = db M.! s
+        cheat _ _ = error "cheat in qeval'"
+
 qeval' counter db (And conjuncts) frames =
   foldM (flip $ qeval' counter db) frames conjuncts
 qeval' counter db (Or disjuncts) frames =

@@ -5,12 +5,15 @@ module Language.GDL.Syntax
        , State, Role, Move
        , escape, unescape
        , sexpToInt, termToInt
+       , (|+|)
        ) where
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as B8
 import Data.Data
+import Data.Function (on)
 import Data.List
+import qualified Data.Map as M
 import Data.String
 
 data Sexp = SAtom String | SList [Sexp]
@@ -41,7 +44,8 @@ data Query = Query Term
 
 type Clause = (Term, Query)
 
-type Database = [Clause]
+type Database = M.Map String [Clause]
+--type Database = [Clause]
 
 type Role = Term
 type Move = Term
@@ -77,3 +81,16 @@ termToInt (Atom s) = case B8.readInt $ B8.pack s of
   Nothing -> Nothing
   Just (i, rest) -> if BL.null rest then Just i else Nothing
 termToInt _ = Nothing
+
+
+(|+|) :: Database -> [Clause] -> Database
+db |+| sts = db `M.union` stdb
+  where stdb = M.fromList $
+               map (\cs -> (fst $ head cs, map snd cs)) $
+               groupBy ((==) `on` fst) $
+               sortBy (compare `on` fst) $
+               map convert sts
+        convert c = (termName c, c)
+        termName (Atom s, _) = s
+        termName (Compound ((Atom s) : _), _) = s
+        termName _ = error "termName!"
