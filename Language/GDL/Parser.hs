@@ -6,7 +6,9 @@ module Language.GDL.Parser
        ) where
 
 import Control.Applicative ((<$>), (<*), (*>))
-import Data.List (foldl')
+import Data.List (foldl', sortBy, groupBy)
+import Data.Function (on)
+import qualified Data.Map as M
 import Text.Parsec.String
 import Text.Parsec hiding (parse)
 import qualified Text.Parsec as P
@@ -46,14 +48,21 @@ sexpToTerm (SList ss) = Compound $ map sexpToTerm ss
 
 -- | Convert a list of S-exps to a logic database.
 sexpsToDatabase :: [Sexp] -> Database
-sexpsToDatabase = reverse . foldl' (\db s -> convert s : db) []
-  where convert :: Sexp -> Clause
+sexpsToDatabase = M.fromList .
+                  map (\cs -> (fst $ head cs, map snd cs)) .
+                  groupBy ((==) `on` fst) .
+                  sortBy (compare `on` fst) .
+                  foldl' (\db s -> convert s : db) []
+  where convert :: Sexp -> (String, Clause)
         convert (SList (SAtom "<=" : ss)) = case ss of
-          [h] -> (sexpToTerm h, Pass)
-          [h, t] -> (sexpToTerm h, sexpToQuery t)
-          (h:ts) -> (sexpToTerm h, And $ map sexpToQuery ts)
+          [h] -> (termName h, (sexpToTerm h, Pass))
+          [h, t] -> (termName h, (sexpToTerm h, sexpToQuery t))
+          (h:ts) -> (termName h, (sexpToTerm h, And $ map sexpToQuery ts))
           [] -> error "Free-standing implication symbol"
-        convert s = (sexpToTerm s, Pass)
+        convert s = (termName s, (sexpToTerm s, Pass))
+        termName (SAtom s) = s
+        termName (SList ((SAtom s) : _)) = s
+        termName _ = error "termName!"
 
 sexpToQuery :: Sexp -> Query
 sexpToQuery (SList [SAtom "not", t]) = Not $ Query $ sexpToTerm t

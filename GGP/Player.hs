@@ -132,13 +132,13 @@ basicPlay :: (GDL.State -> GGP a Move)
           -> Maybe [(Role, Move)] -> GGP a GGPReply
 basicPlay bestMove _mmoves = do
   Match {..} <- get
-  --liftIO $ putStrLn $ "State: " ++
-  --  (intercalate ", " $ map prettyPrint matchState)
+  liftIO $ putStrLn $ "State: " ++
+    (intercalate ", " $ map prettyPrint matchState)
   let moves = legal matchDB matchState matchRole
-  --liftIO $ putStrLn $ "Legal moves: " ++
-  --  (intercalate ", " $ map printMach moves)
+  liftIO $ putStrLn $ "Legal moves: " ++
+    (intercalate ", " $ map printMach moves)
   move <- bestMove matchState
-  --liftIO $ putStrLn $ "Making move: " ++ printMach move
+  liftIO $ putStrLn $ "Making move: " ++ printMach move
   return $ Action move
 
 handler :: Bool -> PlayerParams -> IORef (MatchMap a) -> Player a -> Application

@@ -46,7 +46,7 @@ bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
       poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
-  ss <- mapM (makeMove Max) poss
+  ss <- mapM (makeMove Min) poss
   return $ fst $ maximumBy (compare `on` snd) $ zip as ss
 
 minimaxPlayer :: Player Int

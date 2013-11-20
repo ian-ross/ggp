@@ -76,7 +76,7 @@ bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
       poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
-  vs <- mapM (makeMove Max 0) poss
+  vs <- mapM (makeMove Min 0) poss
   let avs = zip as vs
   msg $ "Moves and values: " ++ show avs
   return $ fst $ maximumBy (compare `on` snd) avs

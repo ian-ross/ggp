@@ -26,7 +26,7 @@ legal :: Database -> State -> Role -> [Move]
 legal db st r =
   qextract [gdlq|(legal $r ?m)|] (\t -> case t of
                                      [gdlq|(legal _ $m)|] -> Just m
-                                     _ -> Nothing) (db ++ st)
+                                     _ -> Nothing) (db |+| st)
 
 -- | Determine all feasible moves in a game for a given role using the
 -- "input" relation.
@@ -47,12 +47,12 @@ jointLegalIf _db _st _r _m = []
 
 -- | Is a given state a terminal state?
 isTerminal :: Database -> State -> Bool
-isTerminal db st = not $ null $ query (db ++ st) [gdlq|terminal|]
+isTerminal db st = not $ null $ query (db |+| st) [gdlq|terminal|]
 
 -- | Determine goal values for a given state.
 goals :: Database -> State -> [(Role, Integer)]
 goals db st =
-  let db' = db ++ st
+  let db' =  db |+| st
       gs = qextract [gdlq|(goal ?r ?g)|] (\t -> case t of
                                              [gdlq|(goal $r $g)|] -> Just (r, g)
                                              _ -> Nothing) db'
@@ -62,17 +62,19 @@ goals db st =
 -- | Determine goal values for a given role in a given state.
 goal :: Database -> State -> Role -> Integer
 goal db st r =
-  let db' = db ++ st
+  let db' = db |+| st
       gs = qextract [gdlq|(goal $r ?g)|] (\t -> case t of
                                              [gdlq|(goal _ $g)|] -> Just g
                                              _ -> Nothing) db'
-  in maybe (-1) fromIntegral . termToInt $ head gs
+  in case gs of
+    [] -> (-1)
+    _ -> maybe (-1) fromIntegral . termToInt $ head gs
 
 -- | Apply moves to give a new state.
 applyMoves :: Database -> State -> [(Role, Move)] -> State
 applyMoves db st rms =
   let ms = map (\(r, m) -> ([gdl|(does $r $m)|], Pass)) rms
-      db' = db ++ st ++ ms
+      db' = (db |+| st) |+| ms
       conv t = case t of
         [gdlq|(next $i)|] -> Just ([gdl|(true $i)|], Pass)
         _                 -> Nothing
