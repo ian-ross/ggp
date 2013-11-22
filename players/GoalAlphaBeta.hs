@@ -22,17 +22,24 @@ msg s = do
   e <- gets matchExtra
   logMsg $ replicate (nest e) ' ' ++ s
 
+oppRole :: Database -> Role -> Maybe Role
+oppRole db r = case delete r $ roles db of
+  []      -> Nothing
+  (opp:_) -> Just opp
+
 minscore :: Int -> Integer -> Integer -> State -> Move -> Game Integer
 minscore level alpha beta st m = do
   Match {..} <- get
   msg $ "maxscore: level=" ++ show level ++
     " alpha=" ++ show alpha ++ " beta=" ++ show beta ++
     " m=" ++ prettyPrint m
-  let oppRole = head $ delete matchRole $ roles matchDB
-      acts = legal matchDB st oppRole
+  let role = case oppRole matchDB matchRole of
+            Nothing -> matchRole
+            Just r -> r
+      acts = legal matchDB st role
       go _alp bet [] = return bet
       go alp bet (a:as) = do
-        let poss = applyMoves matchDB st [(matchRole, m), (oppRole, a)]
+        let poss = applyMoves matchDB st [(matchRole, m), (role, a)]
         s <- maxscore (level + 1) alp bet poss
         let bet' = bet `min` s
         if bet' <= alp
