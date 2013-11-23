@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, OverloadedStrings #-}
 module GGP.Utils where
 
 import Data.List (transpose, nub)

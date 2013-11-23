@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings #-}
 module Language.GDL.Parser
        ( parse, parseMaybe
        , parseQuery, parseTerm, parseSexp
@@ -6,10 +6,12 @@ module Language.GDL.Parser
        ) where
 
 import Control.Applicative ((<$>), (<*), (*>))
+import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString.Char8 as B
 import Data.List (foldl', sortBy, groupBy)
 import Data.Function (on)
 import qualified Data.Map as M
-import Text.Parsec.String
+import Text.Parsec.ByteString
 import Text.Parsec hiding (parse)
 import qualified Text.Parsec as P
 
@@ -17,23 +19,23 @@ import Language.GDL.Syntax
 
 
 -- | Parse logic database from a string.
-parse :: String -> Either ParseError Database
+parse :: ByteString -> Either ParseError Database
 parse s = case parseSexp s of
   Left e -> Left e
   Right sexps -> Right $ sexpsToDatabase sexps
 
 -- | A variant of 'parse' that returns 'Nothing' if the parse fails.
-parseMaybe :: String -> Maybe Database
+parseMaybe :: ByteString -> Maybe Database
 parseMaybe s = either (const Nothing) Just $ parse s
 
 -- | Parse a single query from a string.
-parseQuery :: String -> Maybe Query
+parseQuery :: ByteString -> Maybe Query
 parseQuery s = case parseSexp s of
   Right [sexp] -> Just $ sexpToQuery sexp
   _            -> Nothing
 
 -- | Parse a single term from a string (used for GGP protocol).
-parseTerm :: String -> Maybe Term
+parseTerm :: ByteString -> Maybe Term
 parseTerm s = case parseSexp s of
   Right [sexp] -> Just $ sexpToTerm sexp
   _            -> Nothing
@@ -41,9 +43,10 @@ parseTerm s = case parseSexp s of
 -- | Convert a single S-exp to a term.
 sexpToTerm :: Sexp -> Term
 sexpToTerm (SAtom "_") = Wild
-sexpToTerm (SAtom ('?':s)) = Var s
-sexpToTerm (SAtom ('$':s)) = AntiVar s
-sexpToTerm (SAtom s) = Atom s
+sexpToTerm (SAtom s) = case B.splitAt 1 s of
+  ("?", sub) -> Var sub
+  ("$", sub) -> AntiVar sub
+  _ -> Atom s
 sexpToTerm (SList ss) = Compound $ map sexpToTerm ss
 
 -- | Convert a list of S-exps to a logic database.
@@ -53,7 +56,7 @@ sexpsToDatabase = M.fromList .
                   groupBy ((==) `on` fst) .
                   sortBy (compare `on` fst) .
                   foldl' (\db s -> convert s : db) []
-  where convert :: Sexp -> (String, Clause)
+  where convert :: Sexp -> (ByteString, Clause)
         convert (SList (SAtom "<=" : ss)) = case ss of
           [h] -> (termName h, (sexpToTerm h, Pass))
           [h, t] -> (termName h, (sexpToTerm h, sexpToQuery t))
@@ -76,7 +79,7 @@ sexpToQuery t = Query $ sexpToTerm t
 -- | Parse S-Expressions from a String.  If the parse was successful,
 -- @Right sexps@ is returned; otherwise, @Left (errorMsg, leftover)@
 -- is returned.
-parseSexp :: String -> Either ParseError [Sexp]
+parseSexp :: ByteString -> Either ParseError [Sexp]
 parseSexp = P.parse (whiteSpace *> many sexpParser) ""
 
 -- | A parser for S-Expressions.  Ignoring whitespace, we follow the
@@ -90,7 +93,7 @@ sexpParser :: Parser Sexp
 sexpParser = choice [ list <?> "list", atom <?> "atom" ] where
   list = SList <$> (char '(' *> whiteSpace *>
                     many sexpParser <* char ')') <* whiteSpace
-  atom = SAtom . unescape <$> (choice [str, anything]) <* whiteSpace
+  atom = SAtom . unescape . B.pack <$> (choice [str, anything]) <* whiteSpace
   str = char '"' *> many (noneOf "\"") <* char '"'
   anything = many1 (noneOf " \t\n()")
 

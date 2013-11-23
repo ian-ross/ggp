@@ -3,6 +3,8 @@ module Language.GDL.Query
        , instantiate
        ) where
 
+import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString.Char8 as B
 import qualified Data.Map as M
 import Data.Maybe
 import Data.STRef
@@ -25,10 +27,10 @@ qeval' :: STRef s Integer -> Database -> Query -> [Substitution]
 qeval' _ _ Pass frames = return frames
 qeval' counter db (Query struct) frames = fmap concat . mapM applied $ frames
   where applied frame = fmap concat . mapM (apply counter db frame struct) $
-                        cheat struct db
-        cheat (Atom s) db = db M.! s
-        cheat (Compound ((Atom s):_)) db = db M.! s
-        cheat _ _ = error "cheat in qeval'"
+                        cheat struct
+        cheat (Atom s) = db M.! s
+        cheat (Compound ((Atom s):_)) = db M.! s
+        cheat _ = error "cheat in qeval'"
 
 qeval' counter db (And conjuncts) frames =
   foldM (flip $ qeval' counter db) frames conjuncts
@@ -45,7 +47,8 @@ apply :: STRef s Integer -> Database -> Substitution -> Term -> Clause
 apply counter db frame struct clause = do
   num <- readSTRef counter
   modifySTRef counter (+1)
-  apply' counter db frame struct (rewriteClause (show num ++ "#") clause)
+  apply' counter db frame struct
+    (rewriteClause (B.pack (show num ++ "#")) clause)
 
 apply' :: STRef s Integer -> Database -> Substitution -> Term -> Clause
        -> ST s [Substitution]
@@ -54,10 +57,10 @@ apply' counter db frame struct (conclusion, body) =
     Just frame' -> qeval' counter db body [frame']
     Nothing     -> return []
 
-rewriteClause :: String -> Clause -> Clause
+rewriteClause :: ByteString -> Clause -> Clause
 rewriteClause p (bod, concl) = (rewrite p bod, rewriteQ p concl)
 
-rewriteQ :: String -> Query -> Query
+rewriteQ :: ByteString -> Query -> Query
 rewriteQ p (Query t) = Query $ rewrite p t
 rewriteQ p (And cs) = And $ map (rewriteQ p) cs
 rewriteQ p (Or cs) = Or $ map (rewriteQ p) cs
@@ -65,9 +68,9 @@ rewriteQ p (Distinct c1 c2) = Distinct (rewrite p c1) (rewrite p c2)
 rewriteQ p (Not c) = Not $ rewriteQ p c
 rewriteQ _ Pass = Pass
 
-rewrite :: String -> Term -> Term
+rewrite :: ByteString -> Term -> Term
 rewrite _ x@(Atom _) = x
-rewrite p (Var i) = Var (p ++ i)
+rewrite p (Var i) = Var (p `B.append` i)
 rewrite _ (AntiVar i) = AntiVar i
 rewrite p (Compound cs) = Compound $ map (rewrite p) cs
 rewrite _ Wild = Wild
@@ -84,7 +87,7 @@ inst :: Substitution -> Term -> Term
 inst _ x@(Atom _) = x
 inst sub (Var i) = case M.lookup i sub of
   Just v  -> inst sub v
-  Nothing -> error $ "Cannot instantiate variable " ++ i
-inst _ (AntiVar i) = error $ "Cannot instantiate anti-variable " ++ i
+  Nothing -> error $ "Cannot instantiate variable " ++ B.unpack i
+inst _ (AntiVar i) = error $ "Cannot instantiate anti-variable " ++ B.unpack i
 inst sub (Compound cs) = Compound $ map (inst sub) cs
 inst _ Wild = error $ "Cannot instantiate wildcard"

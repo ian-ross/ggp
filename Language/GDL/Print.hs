@@ -3,6 +3,7 @@ module Language.GDL.Print
        ( prettyPrint, printMach ) where
 
 import Data.List
+import qualified Data.ByteString.Char8 as B
 import Text.PrettyPrint
 
 import Language.GDL.Syntax
@@ -14,9 +15,9 @@ prettyPrint :: Pretty a => a -> String
 prettyPrint = render . pretty
 
 instance Pretty Term where
-  pretty (Atom s) = text s
-  pretty (Var i) = text "?" <> text i
-  pretty (AntiVar i) = text "$" <> text i
+  pretty (Atom s) = text (B.unpack s)
+  pretty (Var i) = text "?" <> text (B.unpack i)
+  pretty (AntiVar i) = text "$" <> text (B.unpack i)
   pretty Wild = text "_"
   pretty (Compound ts) = parens $ hsep $ map pretty ts
 
@@ -38,7 +39,7 @@ instance Pretty [Clause] where
 -- | Pretty print a 'Term' with minimal formatting.  Suitable for
 -- machine processing.
 printMach :: Term -> String
-printMach (Atom s)  = let es = escape s
+printMach (Atom s)  = let es = escape (B.unpack s)
                       in if shouldQuote es
                          then ('\"' : es) ++ "\""
                          else es
@@ -48,8 +49,8 @@ printMach (Atom s)  = let es = escape s
       || find (\c -> (c < 'A' || 'z' < c)
                      && (c < '0' || '9' < c)
                      && not (c `elem` "-_+~<>='/*")) es /= Nothing
-printMach (Var i)  = "?" ++ i
-printMach (AntiVar i)  = "$" ++ i
+printMach (Var i)  = "?" ++ B.unpack i
+printMach (AntiVar i)  = "$" ++ B.unpack i
 printMach Wild  = "_"
 printMach (Compound xs) = makeList (map printMach xs)
 

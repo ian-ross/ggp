@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable, RecordWildCards #-}
-{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
 module GGP.Player
        ( Match (..), Player (..), GGP
        , GGPRequest (..), GGPReply (..)
@@ -17,6 +18,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State hiding (get, put, gets, modify)
 import qualified Control.Monad.Trans.State as CMTS
+import Data.ByteString.Char8 (ByteString)
 import Data.Char
 import Data.Default
 import Data.IORef
@@ -62,7 +64,8 @@ modify :: Monad m => (s -> s) -> RandT g (StateT s m) ()
 modify f = lift (CMTS.modify f)
 
 modExtra :: Monad m => (a -> a) -> RandT g (StateT (Match a) m) ()
-modExtra f = modify $ \st -> st { matchExtra = f (matchExtra st) }
+modExtra f = modify $ \st -> let !new = f (matchExtra st)
+                                 in st { matchExtra = new }
 
 logMsg :: String -> GGP a ()
 logMsg msg = do
@@ -81,7 +84,7 @@ instance Default a => Default (Player a) where
                , handleStop = const (return Done)
                , handlePlay = const (return Ready) }
 
-type MatchMap a = M.Map String (IORef (StdGen, Match a))
+type MatchMap a = M.Map ByteString (IORef (StdGen, Match a))
 
 data PlayerArgs = PlayerArgs { player :: String
                              , port :: Int
@@ -161,7 +164,7 @@ handler logging params rmatchmap player req = do
         liftIO $ putStrLn $ "RESP: " ++ show response
       ggpReply response
 
-doStart :: String -> Term -> Database -> Int -> Int -> Bool -> Player a
+doStart :: ByteString -> Term -> Database -> Int -> Int -> Bool -> Player a
         -> IORef (MatchMap a) -> PlayerParams -> ResourceT IO GGPReply
 doStart matchid role db sclk pclk logging player rmatchmap params = do
   let st = initState db
@@ -182,7 +185,7 @@ doStart matchid role db sclk pclk logging player rmatchmap params = do
   liftIO $ writeIORef rmatch (gen', match')
   return resp
 
-doPlay :: String -> Term -> Player a -> MatchMap a -> ResourceT IO GGPReply
+doPlay :: ByteString -> Term -> Player a -> MatchMap a -> ResourceT IO GGPReply
 doPlay matchid moves player matchmap = do
   let rmatch = matchmap M.! matchid
   (gen, m) <- liftIO $ readIORef rmatch
@@ -195,7 +198,7 @@ doPlay matchid moves player matchmap = do
   liftIO $ writeIORef rmatch (gen', match'')
   return resp
 
-doStop :: String -> Term -> Player a -> MatchMap a -> ResourceT IO GGPReply
+doStop :: ByteString -> Term -> Player a -> MatchMap a -> ResourceT IO GGPReply
 doStop matchid moves player matchmap = do
   let rmatch = matchmap M.! matchid
   (gen, match) <- liftIO $ readIORef rmatch

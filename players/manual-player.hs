@@ -3,6 +3,7 @@ module Main where
 
 import Control.Applicative
 import Control.Monad.IO.Class
+import qualified Data.ByteString.Char8 as B
 import Data.CaseInsensitive
 import Network.HTTP.Types.Status
 import Network.Wai
@@ -36,7 +37,7 @@ getResp :: IO Term
 getResp = do
   putStr $ "? "
   hFlush stdout
-  resp <- (foldedCase . mk) <$> getLine
+  resp <- (B.pack . foldedCase . mk) <$> getLine
   case parseTerm resp of
     Just s -> return s
     _      -> getResp
