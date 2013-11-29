@@ -73,10 +73,11 @@ maxscore level alpha beta st = do
   msg $ "maxscore returns " ++ show retval
   return retval
 
-bestMove :: State -> Game Move
+bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
+  setBest $ head as
   vs <- forM as (minscore 0 0 100 st0)
   let avs = zip as vs
       bestv = maximum vs
@@ -84,7 +85,7 @@ bestMove st0 = do
   msg $ "Moves and values: " ++ show avs
   msg $ "Possible moves: " ++ show possas
   idx <- getRandomR (0, length possas-1)
-  return $ possas !! idx
+  setBest $ possas !! idx
 
 initEx :: PlayerParams -> DLState
 initEx ps = case getParam "maxDepth" ps of

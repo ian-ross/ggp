@@ -5,11 +5,13 @@ import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-firstMove :: State -> GGP () Move
+firstMove :: State -> GGP () ()
 firstMove st = do
   Match {..} <- get
   let moves = legal matchDB st matchRole
-  return $ head moves
+  liftIO $ putStrLn $ "LEGAL: " ++ show (head moves)
+  setBest $ head moves
+  liftIO $ putStrLn $ "LEGAL DONE"
 
 legalPlayer :: Player ()
 legalPlayer = def { handlePlay = basicPlay firstMove }

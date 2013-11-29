@@ -13,7 +13,6 @@ import Language.Haskell.AntiQuoter
 import Language.GDL.Syntax
 import Language.GDL.Parser
 
-import Debug.Trace
 
 gdl :: QuasiQuoter
 gdl = QuasiQuoter { quoteExp = gdlToTHExp (parseTerm . B.pack)
