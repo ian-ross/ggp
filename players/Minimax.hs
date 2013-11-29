@@ -41,13 +41,14 @@ makeMove t st = do
     " returns " ++ show retval
   return retval
 
-bestMove :: State -> Game Move
+bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
       poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
+  setBest $ head as
   ss <- mapM (makeMove Min) poss
-  return $ fst $ maximumBy (compare `on` snd) $ zip as ss
+  setBest $ fst $ maximumBy (compare `on` snd) $ zip as ss
 
 minimaxPlayer :: Player Int
 minimaxPlayer = def { initExtra = const 0, handlePlay = basicPlay bestMove }

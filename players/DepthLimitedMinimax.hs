@@ -70,17 +70,19 @@ maxscore level st = do
   msg $ "maxscore returns " ++ show retval
   return retval
 
-bestMove :: State -> Game Move
+bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
       poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
+  setBest $ head as
   vs <- if matchNRoles > 1
         then mapM (minscore 0 st0) as
         else mapM (maxscore 0) poss
   let avs = zip as vs
-  logMsg $ "Moves and values: " ++ show avs
-  return $ fst $ maximumBy (compare `on` snd) avs
+      pravs = zip (map prettyPrint as) vs
+  logMsg $ "Moves and values: " ++ show pravs
+  setBest $ fst $ maximumBy (compare `on` snd) avs
 
 initEx :: PlayerParams -> DLState
 initEx ps = case getParam "maxDepth" ps of

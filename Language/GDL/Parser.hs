@@ -51,7 +51,7 @@ sexpsToDatabase :: [Sexp] -> Database
 sexpsToDatabase = M.fromList .
                   map (\cs -> (fst $ head cs, map snd cs)) .
                   groupBy ((==) `on` fst) .
-                  sortBy (compare `on` fst) .
+                  sortBy (compare `on` fst) . reverse .
                   foldl' (\db s -> convert s : db) []
   where convert :: Sexp -> (String, Clause)
         convert (SList (SAtom "<=" : ss)) = case ss of

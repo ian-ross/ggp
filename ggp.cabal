@@ -35,6 +35,7 @@ library
                        pretty                   >= 1.1.1.0    && < 1.2,
                        random                   >= 1.0.1.1    && < 1.1,
                        resourcet                >= 0.4.8      && < 0.5,
+                       SafeSemaphore            >= 0.9.0      && < 0.10,
                        sexp                     >= 0.7        && < 0.8,
                        template-haskell         >= 2.8        && < 2.9,
                        transformers             >= 0.3        && < 0.4,
