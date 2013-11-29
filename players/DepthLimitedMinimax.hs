@@ -71,15 +71,14 @@ makeMove t level st = do
   msg $ "makeMove " ++ show t ++ " returns " ++ show retval
   return retval
 
-bestMove :: State -> Game Move
+bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
       poss = map (\a -> applyMoves matchDB st0 [(matchRole, a)]) as
-  vs <- mapM (makeMove Min 0) poss
-  let avs = zip as vs
-  msg $ "Moves and values: " ++ show avs
-  return $ fst $ maximumBy (compare `on` snd) avs
+  setBest $ head as
+  ss <- mapM (makeMove Min 0) poss
+  setBest $ fst $ maximumBy (compare `on` snd) $ zip as ss
 
 initEx :: PlayerParams -> DLState
 initEx ps = case getParam "maxDepth" ps of

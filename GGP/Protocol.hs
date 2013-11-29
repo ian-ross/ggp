@@ -7,8 +7,8 @@ module GGP.Protocol
 
 import Control.Applicative
 import Control.Monad.Trans.Resource
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as B8
+import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString.Char8 as B
 import Data.CaseInsensitive
 import Network.HTTP.Types.Header
 import Network.Wai
@@ -19,18 +19,18 @@ import Language.GDL
 respHdrs :: String -> ResponseHeaders
 respHdrs body = let len = length body
                 in [(hContentType, "text/acl"),
-                    (hContentLength, BL.toStrict $ B8.pack $ show len),
+                    (hContentLength, B.pack $ show len),
                     ("Access-Control-Allow-Origin", "*")]
 
 data GGPRequest = Info
-                | Start { reqMatch :: String
+                | Start { reqMatch :: ByteString
                         , staRole :: Role
                         , staDesc :: Database
                         , staStartClock :: Int
                         , staPlayClock :: Int }
-                | Play { reqMatch :: String
+                | Play { reqMatch :: ByteString
                        , plaMoves :: Term }
-                | Stop { reqMatch :: String
+                | Stop { reqMatch :: ByteString
                        , stoMoves :: Term }
                 deriving (Eq, Show)
 
@@ -43,7 +43,7 @@ data GGPReply = Available
 ggpParse :: Request -> ResourceT IO (Either String GGPRequest)
 ggpParse req = do
   body <- (foldedCase . mk) <$> bodyBytestring req
-  case parseSexp $ B8.unpack $ BL.fromStrict body of
+  case parseSexp body of
     Right [sexp] -> return $ makeGGPRequest sexp
     _            -> return $ Left "invalid message"
 

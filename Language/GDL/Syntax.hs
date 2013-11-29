@@ -8,23 +8,26 @@ module Language.GDL.Syntax
        , (|+|)
        ) where
 
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.ByteString.Lazy.Char8 as B8
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
+import Data.Char
+import Data.Word
 import Data.Data
 import Data.Function (on)
 import Data.List
 import qualified Data.Map as M
 import Data.String
 
-data Sexp = SAtom String | SList [Sexp]
+data Sexp = SAtom ByteString | SList [Sexp]
           deriving (Eq, Show, Data, Typeable)
 
 instance IsString Sexp where
-  fromString = SAtom
+  fromString = SAtom . B8.pack
 
-type Identifier = String
+type Identifier = ByteString
 
-data Term = Atom String
+data Term = Atom ByteString
           | Var Identifier
           | Compound [Term]
           | AntiVar Identifier
@@ -32,7 +35,7 @@ data Term = Atom String
           deriving (Eq, Ord, Show, Data, Typeable)
 
 instance IsString Term where
-  fromString = Atom
+  fromString = Atom . B8.pack
 
 data Query = Query Term
            | And [Query]
@@ -44,8 +47,7 @@ data Query = Query Term
 
 type Clause = (Term, Query)
 
-type Database = M.Map String [Clause]
---type Database = [Clause]
+type Database = M.Map ByteString [Clause]
 
 type Role = Term
 type Move = Term
@@ -62,24 +64,27 @@ escape = concatMap escapeChar
     escapeChar c    = [c]
 
 -- | The inverse of 'escape'.
-unescape :: String -> String
-unescape = reverse . snd . (foldl' unescapeChar (False, []))
+unescape :: ByteString -> ByteString
+unescape = B.reverse . B.pack . snd .
+           (foldl' unescapeChar (False, [])) . B.unpack
   where
-    unescapeChar :: (Bool, [Char]) -> Char -> (Bool, [Char])
-    unescapeChar (False, cs) '\\' = (True, cs)
-    unescapeChar (_, cs) c        = (False, c : cs)
+    unescapeChar :: (Bool, [Word8]) -> Word8 -> (Bool, [Word8])
+    unescapeChar (False, cs) c = if c == fromIntegral (ord '\\')
+                                 then (True, cs)
+                                 else (False, c : cs)
+    unescapeChar (_, cs) c     = (False, c : cs)
 
 
 sexpToInt :: Sexp -> Maybe Int
-sexpToInt (SAtom s) = case B8.readInt $ B8.pack s of
+sexpToInt (SAtom s) = case B8.readInt s of
   Nothing -> Nothing
-  Just (i, rest) -> if BL.null rest then Just i else Nothing
+  Just (i, rest) -> if B.null rest then Just i else Nothing
 sexpToInt _ = Nothing
 
 termToInt :: Term -> Maybe Int
-termToInt (Atom s) = case B8.readInt $ B8.pack s of
+termToInt (Atom s) = case B8.readInt s of
   Nothing -> Nothing
-  Just (i, rest) -> if BL.null rest then Just i else Nothing
+  Just (i, rest) -> if B.null rest then Just i else Nothing
 termToInt _ = Nothing
 
 

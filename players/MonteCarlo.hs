@@ -2,6 +2,7 @@
 module MonteCarlo (monteCarloPlayer) where
 
 import Control.Applicative ((<$>))
+import Control.Monad
 import Data.Function (on)
 import Data.List (intercalate, maximumBy, delete)
 import qualified Data.Map as M
@@ -47,7 +48,7 @@ evalMove dcmap (t, ot) (Node _ mts) =
           Min -> minimum
           Max -> maximum
 
-makeMove :: M.Map State Integer -> MoveTree -> Game Move
+makeMove :: M.Map State Integer -> MoveTree -> Game ()
 makeMove _ (TerminalLeaf _ _) = error "Leaf state passed to makeMove!"
 makeMove _ (StateLeaf _)      = error "Leaf state passed to makeMove!"
 makeMove dcmap (Node _ mts) = do
@@ -55,7 +56,8 @@ makeMove dcmap (Node _ mts) = do
   let ps = if nroles > 1 then (Min, Max) else (Max, Max)
       (as, ts) = unzip mts
       scs = map (evalMove dcmap ps) ts
-  return $ fst $ maximumBy (compare `on` snd) $ zip as scs
+  --return $ fst $ maximumBy (compare `on` snd) $ zip as scs
+  return ()
 
 
 expand :: (Role, Role) -> Int -> State -> Game MoveTree
@@ -104,27 +106,20 @@ depthCharges maxt rs sts =
   where go :: V.Vector State -> Int -> V.Vector (Integer, Integer)
            -> Game (V.Vector (Integer, Integer))
         go ss n v = do
-          elapsed <- elapsedTime
-          if elapsed > maxt
-            then do
-            liftIO $ putStrLn $ "# of depthcharges: " ++ show n
-            return v
-            else do
-            i <- getRandomR (0, V.length ss - 1)
-            dc <- depthCharge (fst rs) rs (ss V.! i)
-            let (c, sc) = v V.! i
-            go ss (n + 1) (v V.// [(i, (c+1, sc+dc))])
+          i <- getRandomR (0, V.length ss - 1)
+          dc <- depthCharge (fst rs) rs (ss V.! i)
+          let (c, sc) = v V.! i
+          go ss (n + 1) (v V.// [(i, (c+1, sc+dc))])
         nst = length sts
         conv = M.fromList . zip sts . V.toList . V.map mean
         mean (c, sc) = sc `div` c
 
-bestMove :: State -> Game Move
+bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
-  if length as == 1
-    then return $ head as
-    else do
+  setBest $ head as
+  when (length as > 1) $ do
     let rs = (matchRole, maybe matchRole id $ oppRole matchDB matchRole)
     mt <- expand rs 0 st0
     let ss = leafStates mt

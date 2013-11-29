@@ -60,10 +60,12 @@ maxscore alpha beta st = do
   msg $ "maxscore returns " ++ show retval
   return retval
 
-bestMove :: State -> Game Move
+bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
+  idx0 <- getRandomR (0, length as-1)
+  setBest $ as !! idx0
   vs <- forM as (minscore 0 100 st0)
   let avs = zip as vs
       bestv = maximum vs
@@ -71,7 +73,7 @@ bestMove st0 = do
   msg $ "Moves and values: " ++ show avs
   msg $ "Possible moves: " ++ show possas
   idx <- getRandomR (0, length possas-1)
-  return $ possas !! idx
+  setBest $ possas !! idx
 
 alphaBetaPlayer :: Player Int
 alphaBetaPlayer = def { initExtra = const 0

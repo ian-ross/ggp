@@ -7,7 +7,7 @@ import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-bestMove :: State -> GGP () Move
+bestMove :: State -> GGP () ()
 bestMove st0 = do
   Match {..} <- get
   let as = legal matchDB st0 matchRole
@@ -18,8 +18,9 @@ bestMove st0 = do
                  else maximum $ map (value . doone st) $
                       legal matchDB st matchRole
       avs = zip as vs
+  setBest $ head as
   liftIO $ putStrLn $ "Moves and values: " ++ show avs
-  return $ fst $ maximumBy (compare `on` snd) avs
+  setBest $ fst $ maximumBy (compare `on` snd) avs
 
 deliberationPlayer :: Player ()
 deliberationPlayer = def { handlePlay = basicPlay bestMove }
