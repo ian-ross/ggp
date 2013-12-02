@@ -51,4 +51,5 @@ bestMove st0 = do
   setBest $ fst $ maximumBy (compare `on` snd) $ zip as ss
 
 minimaxPlayer :: Player Int
-minimaxPlayer = def { initExtra = const 0, handlePlay = basicPlay bestMove }
+minimaxPlayer = def { initExtra = const (return 0)
+                    , handlePlay = basicPlay bestMove }

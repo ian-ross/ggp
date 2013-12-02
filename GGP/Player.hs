@@ -24,7 +24,8 @@ import qualified Control.Monad.Trans.State.Strict as CMTS
 import Data.Char
 import Data.Default
 import Data.IORef
-import Data.List (intercalate)
+import Data.List (intercalate, elemIndex)
+import Data.Maybe
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Network.HTTP.Types.Status
@@ -32,6 +33,7 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Util
 import System.Console.CmdArgs.Implicit hiding (Default, def)
+import System.Exit
 
 import Language.GDL hiding (State)
 import qualified Language.GDL as GDL
@@ -41,6 +43,7 @@ import GGP.Utils
 data Match a = Match { matchDB :: Database
                      , matchState :: !GDL.State
                      , matchRole :: Role
+                     , matchRoleIdx :: Int
                      , matchRoles :: [Role]
                      , matchNRoles :: Int
                      , matchNFeasible :: Int
@@ -79,17 +82,19 @@ logMsg msg = do
   logging <- gets matchLogging
   when logging $ liftIO $ putStrLn msg
 
-data Player a = Player { initExtra :: PlayerParams -> a
+data Player a = Player { initExtra :: PlayerParams -> IO a
                        , handleStart :: GGP a ()
                        , handlePlay :: GGP a ()
                        , handleStop :: GGP a ()
+                       , postMessage :: GGP a ()
                        }
 
 instance Default a => Default (Player a) where
-  def = Player { initExtra = const def
+  def = Player { initExtra = return def
                , handleStart = return ()
                , handleStop = return ()
-               , handlePlay = return () }
+               , handlePlay = return ()
+               , postMessage = return () }
 
 type MatchMap a = M.Map ByteString (IORef (StdGen, Match a))
 
@@ -125,7 +130,9 @@ runPlayer p = do
   let ps = processParams $ params pas
   putStrLn $ "Parameters: " ++
     (intercalate "," $ map (\(k,v) -> k ++ "=" ++ v) $ M.toList ps)
-  run (port pas) (handler (log pas) ps matchInfo p)
+  shutdown <- newEmptyMVar
+  forkIO $ run (port pas) (handler shutdown (log pas) ps matchInfo p)
+  takeMVar shutdown
 
 processParams :: String -> PlayerParams
 processParams = M.fromList . map (spl . trim) . chunks
@@ -145,8 +152,9 @@ basicPlay bestMove = do
   setBest $ head moves
   bestMove matchState
 
-handler :: Bool -> PlayerParams -> IORef (MatchMap a) -> Player a -> Application
-handler logging params rmatchmap player req = do
+handler :: MVar () -> Bool -> PlayerParams -> IORef (MatchMap a)
+        -> Player a -> Application
+handler shutdown logging params rmatchmap player req = do
   ereq <- ggpParse req
   when logging $
     liftIO $ putStrLn $ "REQ: " ++ show ereq
@@ -159,7 +167,10 @@ handler logging params rmatchmap player req = do
         else do
           matchmap <- liftIO $ readIORef rmatchmap
           case r of
-            Stop matchid moves -> doStop matchid moves player matchmap
+            Stop matchid moves -> do
+              res <- doStop matchid moves player matchmap
+              liftIO $ putMVar shutdown ()
+              return res
             Start matchid role db sclk pclk ->
               doStart matchid role db sclk pclk logging player rmatchmap params
             Play matchid moves -> doPlay matchid moves player matchmap
@@ -176,10 +187,10 @@ doStart matchid role db sclk pclk logging player rmatchmap params = do
       nfeas = S.size feas
   gen <- liftIO $ newStdGen
   bestMove <- liftIO $ newEmptySV
-  let extra = initExtra player params
-      rs = roles db
-      match = Match db st role rs (length rs) nfeas
-                    Nothing sclk pclk bestMove extra logging
+  extra <- liftIO $ initExtra player params
+  let rs = roles db
+      match = Match db st role (fromJust $ elemIndex role rs) rs (length rs)
+                    nfeas Nothing sclk pclk bestMove extra logging
   matchmap <- liftIO $ readIORef rmatchmap
   rmatch <- liftIO $ newIORef (gen, match)
   liftIO $ writeIORef rmatchmap (M.insert matchid rmatch matchmap)
@@ -211,6 +222,7 @@ doPlay matchid moves player matchmap = do
     killThread worker
     killThread killer
     mv <- readSV $ matchCurrentBestMove match'
+    _ <- runStateT (runRandT (postMessage player) playgen) match'
     putStrLn $ "Making move: " ++ prettyPrint mv
     writeIORef rmatch (gen', match')
     return mv

@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances #-}
 module Language.GDL.Print
-       ( prettyPrint, printMach ) where
+       ( prettyPrint, pretty1, printMach ) where
 
 import Data.List
 import qualified Data.ByteString.Char8 as B
@@ -13,6 +13,9 @@ class Pretty a where
 
 prettyPrint :: Pretty a => a -> String
 prettyPrint = render . pretty
+
+pretty1 :: Pretty a => a -> String
+pretty1 = intercalate "," . lines . prettyPrint
 
 instance Pretty Term where
   pretty (Atom s) = text (B.unpack s)

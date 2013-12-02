@@ -76,5 +76,5 @@ bestMove st0 = do
   setBest $ possas !! idx
 
 alphaBetaPlayer :: Player Int
-alphaBetaPlayer = def { initExtra = const 0
+alphaBetaPlayer = def { initExtra = const (return 0)
                       , handlePlay = basicPlay bestMove }

@@ -87,8 +87,8 @@ bestMove st0 = do
   idx <- getRandomR (0, length possas-1)
   setBest $ possas !! idx
 
-initEx :: PlayerParams -> DLState
-initEx ps = case getParam "maxDepth" ps of
+initEx :: PlayerParams -> IO DLState
+initEx ps = return $ case getParam "maxDepth" ps of
   Nothing -> DLState 2 0
   Just d -> DLState (read d :: Int) 0
 

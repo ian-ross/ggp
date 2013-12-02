@@ -80,8 +80,8 @@ bestMove st0 = do
   ss <- mapM (makeMove Min 0) poss
   setBest $ fst $ maximumBy (compare `on` snd) $ zip as ss
 
-initEx :: PlayerParams -> DLState
-initEx ps = case getParam "maxDepth" ps of
+initEx :: PlayerParams -> IO DLState
+initEx ps = return $ case getParam "maxDepth" ps of
   Nothing -> DLState 2 0
   Just d -> DLState (read d :: Int) 0
 

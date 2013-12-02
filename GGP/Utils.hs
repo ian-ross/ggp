@@ -4,6 +4,7 @@ module GGP.Utils where
 import Data.List (transpose, nub)
 import Data.Set (Set)
 import qualified Data.Set as S
+import qualified Data.Map as M
 
 import Language.GDL
 
@@ -58,6 +59,11 @@ goals db st =
                                              _ -> Nothing) db'
   in map (\(r, g) -> (r, toInt g)) gs
   where toInt = maybe (-1) fromIntegral . termToInt
+
+-- | Determine goal values for a given state.
+orderedGoals :: Database -> State -> [Role] -> [Integer]
+orderedGoals db st rs = map (m M.!) rs
+  where m = M.fromList $ goals db st
 
 -- | Determine goal values for a given role in a given state.
 goal :: Database -> State -> Role -> Integer

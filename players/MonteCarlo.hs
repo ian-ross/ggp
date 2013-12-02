@@ -1,137 +1,228 @@
 {-# LANGUAGE RecordWildCards, TemplateHaskell #-}
 module MonteCarlo (monteCarloPlayer) where
 
-import Control.Applicative ((<$>))
 import Control.Monad
 import Data.Function (on)
-import Data.List (intercalate, maximumBy, delete)
-import qualified Data.Map as M
-import qualified Data.Vector as V
+import Data.Ord
+import Data.List (intercalate, sortBy)
+import Data.Maybe
+import Data.IORef (IORef)
+import qualified Data.IORef as IORef
+
 import GGP.Player
 import GGP.Utils
 import Language.GDL
 
-data DLState = DLState { maxDepth :: Int }
+data DLState = DLState { maxDepth :: Int
+                       , mcCount :: Maybe (IORef Integer) }
 
 instance Default DLState where
-  def = DLState { maxDepth = 2 }
+  def = DLState { maxDepth = 2, mcCount = Nothing }
 
 type Game a = GGP DLState a
 
-data MoveType = Max | Min deriving Show
+data MoveType = Max | Min deriving (Eq, Show)
 
-data MoveTree = TerminalLeaf State Integer
-              | StateLeaf State
-              | Node State [(Move, MoveTree)]
-                deriving Eq
+data MTree = TerminalLeaf { mtLabel :: Int
+                          , mtState :: State
+                          , mtUtils :: IORef [Double] }
+             -- ^ State and goal values.
+           | StateLeaf { mtLabel :: Int
+                       , mtState :: State
+                       , mtVisits :: IORef Integer
+                       , mtUtils :: IORef [Double]
+                       , mtParent :: Maybe MTree }
+             -- ^ State, visit count, mean utilities, parent.
+           | Node { mtLabel :: Int
+                  , mtState :: State
+                  , mtUtils :: IORef [Double]
+                  , mtChildren :: [([Move], MTree)]
+                  , mtParent :: Maybe MTree }
+             -- ^ State, utilities, children, parent.
+           deriving Eq
 
-instance Show MoveTree where
-  show (TerminalLeaf s sc) = "T:" ++ show sc ++ "[" ++ show s ++ "]"
-  show (StateLeaf s) = "S[" ++ show s ++ "]"
-  show (Node s mts) = "N[" ++ show s ++ "]:\n  [" ++
-                      intercalate ",\n   "
-                      (map (\(m,t) -> show m ++ "->" ++ show t) mts)
-                      ++ "]"
+newIORef :: a -> Game (IORef a)
+newIORef = liftIO . IORef.newIORef
 
-oppRole :: Database -> Role -> Maybe Role
-oppRole db r = case delete r $ roles db of
-  []      -> Nothing
-  (opp:_) -> Just opp
+readIORef :: IORef a -> Game a
+readIORef = liftIO . IORef.readIORef
 
-evalMove :: M.Map State Integer -> (MoveType,MoveType) -> MoveTree
-         -> Integer
-evalMove _ _ (TerminalLeaf _ sc) = sc
-evalMove dcmap _ (StateLeaf s) = dcmap M.! s
-evalMove dcmap (t, ot) (Node _ mts) =
-  cmp $ map (evalMove dcmap (ot, t) . snd) mts
-  where cmp = case t of
-          Min -> minimum
-          Max -> maximum
+writeIORef :: IORef a -> a -> Game ()
+writeIORef r v = liftIO $ IORef.writeIORef r v
 
-makeMove :: M.Map State Integer -> MoveTree -> Game ()
-makeMove _ (TerminalLeaf _ _) = error "Leaf state passed to makeMove!"
-makeMove _ (StateLeaf _)      = error "Leaf state passed to makeMove!"
-makeMove dcmap (Node _ mts) = do
-  nroles <- gets matchNRoles
-  let ps = if nroles > 1 then (Min, Max) else (Max, Max)
-      (as, ts) = unzip mts
-      scs = map (evalMove dcmap ps) ts
-  --return $ fst $ maximumBy (compare `on` snd) $ zip as scs
-  return ()
+modifyIORef' :: IORef a -> (a -> a) -> Game ()
+modifyIORef' r f = liftIO $ IORef.modifyIORef' r f
 
+utils :: MTree -> Game [Double]
+utils (TerminalLeaf _ _ gsref) = readIORef gsref
+utils (StateLeaf _ _ _ usref _) = readIORef usref
+utils (Node _ _ usref _ _) = readIORef usref
 
-expand :: (Role, Role) -> Int -> State -> Game MoveTree
-expand (role, orole) ply st = do
+parentStr :: MTree -> String
+parentStr n = case n of
+  TerminalLeaf _ _ _ -> "terminal"
+  StateLeaf l _ _ _ p -> pstr l p
+  Node l _ _ _ p -> pstr l p
+  where pstr l p = show l ++ case p of
+          Nothing -> ""
+          Just pn -> "->" ++ parentStr pn
+
+printMTree :: Int -> MTree -> IO ()
+printMTree i (TerminalLeaf l s gsref) = do
+  gs <- IORef.readIORef gsref
+  putStrLn $ replicate i ' ' ++ "T#" ++ show l ++
+    " [" ++ pretty1 s ++ "->" ++ show gs ++ "]"
+printMTree i (StateLeaf l s vref usref p) = do
+  v <- IORef.readIORef vref
+  us <- IORef.readIORef usref
+  let pstr = case p of
+        Nothing -> "none"
+        Just p -> parentStr p
+  putStrLn $ replicate i ' ' ++
+    "S#" ++ show l ++ "{" ++ pstr ++ "} [" ++ pretty1 s ++
+    " (" ++ show v ++ "->" ++ show us ++ ")]"
+printMTree i (Node l s usref mts p) = do
+  us <- IORef.readIORef usref
+  let pstr = case p of
+        Nothing -> "none"
+        Just p -> parentStr p
+  putStrLn $ replicate i ' ' ++ "N#" ++ show l ++ "{" ++ pstr ++
+    "} [" ++ pretty1 s ++
+    " -> " ++ show us ++ "]:"
+  forM_ mts $ \(ms, t) -> do
+    putStrLn $ replicate i ' ' ++ show ms ++ " ==> "
+    printMTree (i + 2) t
+
+oneEach :: [[a]] -> [[a]]
+oneEach [] = [[]]
+oneEach (xs:xss) = let rs = oneEach xss
+                   in concatMap (\r -> map (:r) xs) rs
+
+expand :: IORef Int -> Int -> Maybe MTree -> State -> Game MTree
+expand lref ply parent st = do
   Match {..} <- get
-  let as = legal matchDB st role
-      as' = legal matchDB st orole
-      poss = concatMap (\a ->
-                         map (\a' ->
-                               applyMoves matchDB st [(role, a), (orole,a')])
-                         as')
-             as
   if isTerminal matchDB st
-    then return $ TerminalLeaf st $ goal matchDB st role
+    then do
+    l <- readIORef lref
+    modifyIORef' lref (+1)
+    gsref <- newIORef $ map fromIntegral $ orderedGoals matchDB st matchRoles
+    return $ TerminalLeaf l st gsref
     else if ply >= maxDepth matchExtra
-         then return $ StateLeaf st
-         else (Node st . zip as) <$> mapM (expand (orole, role) (ply + 1)) poss
+         then do
+           vref <- newIORef 0
+           usref <- newIORef $ replicate matchNRoles 0
+           l <- readIORef lref
+           modifyIORef' lref (+1)
+           return $ StateLeaf l st vref usref parent
+         else do
+           let combine r as = map (\a -> (r, a)) as
+               allas = zipWith combine matchRoles $
+                       map (legal matchDB st) matchRoles
+               ms = oneEach allas
+               poss = map (applyMoves matchDB st) ms
+           chs <- mapM (expand lref (ply + 1) Nothing) poss
+           l' <- readIORef lref
+           modifyIORef' lref (+1)
+           usref <- newIORef $ replicate matchNRoles 0
+           let addParent _ tn@(TerminalLeaf _ _ _) = tn
+               addParent p nn@(StateLeaf _ _ _ _ _) = nn { mtParent = Just p }
+               addParent p nn@(Node _ _ _ ch _) =
+                 let n' = nn { mtChildren = ch', mtParent = Just p }
+                     ch' = map (\(ms, mt) -> (ms, addParent n' mt)) ch
+                 in n'
+               mts = zip (map (map snd) ms) (map (addParent n) chs)
+               n = Node l' st usref mts parent
+           allus <- mapM utils chs
+           writeIORef usref $ foldr1 (zipWith max) allus
+           return n
 
+leafStates :: MTree -> [MTree]
+leafStates (TerminalLeaf _ _ _) = []
+leafStates s@(StateLeaf _ _ _ _ _) = [s]
+leafStates (Node _ _ _ mts _) = concatMap leafStates $ map snd mts
 
-leafStates :: MoveTree -> [State]
-leafStates (TerminalLeaf _ _) = []
-leafStates (StateLeaf s) = [s]
-leafStates (Node _ mts) = concatMap leafStates $ map snd mts
-
-depthCharge :: Role -> (Role, Role) -> State -> Game Integer
-depthCharge myrole (r, r') st = do
+randomPlay :: State -> Game [Integer]
+randomPlay st = do
   Match {..} <- get
-  let moves = legal matchDB st r
-      nmoves = length moves
-      moves' = legal matchDB st r'
-      nmoves' = length moves'
-  idx <- getRandomR (0, nmoves-1)
-  idx' <- getRandomR (0, nmoves'-1)
-  let move = moves !! idx
-      move' = moves' !! idx'
-  let st' = applyMoves matchDB st [(r, move), (r', move')]
-  if isTerminal matchDB st'
-    then return $ goal matchDB st' myrole
-    else depthCharge myrole (r', r) st'
+  if isTerminal matchDB st
+    then return $ orderedGoals matchDB st matchRoles
+    else do
+    let moves = map (legal matchDB st) matchRoles
+        nmoves = map length moves
+    idxs <- mapM (\n -> getRandomR (0, n-1)) nmoves
+    let ms = zip matchRoles $ zipWith (!!) moves idxs
+    randomPlay $ applyMoves matchDB st ms
 
-depthCharges :: Double -> (Role, Role) -> [State] -> Game (M.Map State Integer)
-depthCharges maxt rs sts =
-  if null sts
-  then return M.empty
-  else conv <$> go (V.fromList sts) 0 (V.replicate nst (1, 1))
-  where go :: V.Vector State -> Int -> V.Vector (Integer, Integer)
-           -> Game (V.Vector (Integer, Integer))
-        go ss n v = do
-          i <- getRandomR (0, V.length ss - 1)
-          dc <- depthCharge (fst rs) rs (ss V.! i)
-          let (c, sc) = v V.! i
-          go ss (n + 1) (v V.// [(i, (c+1, sc+dc))])
-        nst = length sts
-        conv = M.fromList . zip sts . V.toList . V.map mean
-        mean (c, sc) = sc `div` c
+propagate :: [Double] -> Maybe MTree -> Game ()
+propagate newus (Just t@(Node _ _ usref _ parent)) = do
+  us <- readIORef usref
+  let us' = zipWith max us newus
+  writeIORef usref us'
+  propagate us' parent
+propagate _ _ = return ()
+
+chooseBestMove :: [([Move], [Double])] -> Game Move
+chooseBestMove mvus = do
+  Match{..} <- get
+  let i = matchRoleIdx
+      subs = sortBy (compare `on` (Down . (!! i) . snd)) mvus
+      maxs = snd (head subs) !! i
+      poss = takeWhile (\(ms, ss) -> ss !! i == maxs) subs
+      others = map (\(ms, ss) -> (ms, take i ss ++ drop (i + 1) ss)) poss
+      sothers = sortBy (compare `on` snd) others
+  return $ (fst (head others)) !! i
+
+mcUpdates :: MTree -> [MTree] -> Game ()
+mcUpdates top@(Node _ _ topusref _ _) ss = do
+  Match{..} <- get
+  let ns = length ss
+  when (ns > 0) $ do
+    is <- getRandomR (0, ns-1)
+    let sl@(StateLeaf _ s vref usref parent) = ss !! is
+    sample <- randomPlay s
+    v <- readIORef vref
+    us <- readIORef usref
+    let vr = fromIntegral v
+        us' = zipWith (\u x -> (vr * u + fromIntegral x) / (vr + 1)) us sample
+    writeIORef usref us'
+    writeIORef vref (v + 1)
+    modifyIORef' (fromJust $ mcCount matchExtra) (+1)
+    propagate us' parent
+  topus <- readIORef topusref
+  let (mvs, submts) = unzip $ mtChildren top
+  subus <- mapM (readIORef . mtUtils) submts
+  let mvus = zip mvs subus
+  mv <- chooseBestMove mvus
+  setBest mv
+  mcUpdates top ss
 
 bestMove :: State -> Game ()
 bestMove st0 = do
   Match {..} <- get
+  writeIORef (fromJust $ mcCount matchExtra) 0
   let as = legal matchDB st0 matchRole
   setBest $ head as
   when (length as > 1) $ do
-    let rs = (matchRole, maybe matchRole id $ oppRole matchDB matchRole)
-    mt <- expand rs 0 st0
+    lref <- newIORef 1
+    mt <- expand lref 0 Nothing st0
     let ss = leafStates mt
     liftIO $ putStrLn $ "# of leaf states: " ++ show (length ss)
-    dcmap <- depthCharges (fromIntegral matchPlayClock - 0.5) rs ss
-    makeMove dcmap mt
+    mcUpdates mt ss
 
-initEx :: PlayerParams -> DLState
-initEx ps = case getParam "maxDepth" ps of
-  Nothing -> DLState 2
-  Just d -> DLState (read d :: Int)
+finalMessage :: Game ()
+finalMessage = do
+  Match{..} <- get
+  c <- readIORef (fromJust $ mcCount matchExtra)
+  liftIO $ putStrLn $ "Total MC samples: " ++ show c
+
+initEx :: PlayerParams -> IO DLState
+initEx ps = do
+  cref <- IORef.newIORef 0
+  return $ case getParam "maxDepth" ps of
+    Nothing -> DLState 2 (Just cref)
+    Just d -> DLState (read d :: Int) (Just cref)
 
 monteCarloPlayer :: Player DLState
 monteCarloPlayer = def { initExtra = initEx
-                       , handlePlay = basicPlay bestMove }
+                       , handlePlay = basicPlay bestMove
+                       , postMessage = finalMessage }
