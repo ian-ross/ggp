@@ -4,7 +4,7 @@ module MonteCarlo (monteCarloPlayer) where
 import Control.Monad
 import Data.Function (on)
 import Data.Ord
-import Data.List (intercalate, sortBy)
+import Data.List (sortBy)
 import Data.Maybe
 import Data.IORef (IORef)
 import qualified Data.IORef as IORef
@@ -23,18 +23,18 @@ type Game a = GGP DLState a
 
 data MoveType = Max | Min deriving (Eq, Show)
 
-data MTree = TerminalLeaf { mtLabel :: Int
-                          , mtState :: State
+data MTree = TerminalLeaf { _mtLabel :: Int
+                          , _mtState :: State
                           , mtUtils :: IORef [Double] }
              -- ^ State and goal values.
-           | StateLeaf { mtLabel :: Int
-                       , mtState :: State
-                       , mtVisits :: IORef Integer
+           | StateLeaf { _mtLabel :: Int
+                       , _mtState :: State
+                       , _mtVisits :: IORef Integer
                        , mtUtils :: IORef [Double]
                        , mtParent :: Maybe MTree }
              -- ^ State, visit count, mean utilities, parent.
-           | Node { mtLabel :: Int
-                  , mtState :: State
+           | Node { _mtLabel :: Int
+                  , _mtState :: State
                   , mtUtils :: IORef [Double]
                   , mtChildren :: [([Move], MTree)]
                   , mtParent :: Maybe MTree }
@@ -67,11 +67,37 @@ parentStr n = case n of
           Nothing -> ""
           Just pn -> "->" ++ parentStr pn
 
+-- printMTree :: Int -> MTree -> IO ()
+-- printMTree i (TerminalLeaf l s gsref) = do
+--   gs <- IORef.readIORef gsref
+--   putStrLn $ replicate i ' ' ++ "T#" ++ show l ++
+--     " [" ++ pretty1 s ++ "->" ++ show gs ++ "]"
+-- printMTree i (StateLeaf l s vref usref p) = do
+--   v <- IORef.readIORef vref
+--   us <- IORef.readIORef usref
+--   let pstr = case p of
+--         Nothing -> "none"
+--         Just p -> parentStr p
+--   putStrLn $ replicate i ' ' ++
+--     "S#" ++ show l ++ "{" ++ pstr ++ "} [" ++ pretty1 s ++
+--     " (" ++ show v ++ "->" ++ show us ++ ")]"
+-- printMTree i (Node l s usref mts p) = do
+--   us <- IORef.readIORef usref
+--   let pstr = case p of
+--         Nothing -> "none"
+--         Just p -> parentStr p
+--   putStrLn $ replicate i ' ' ++ "N#" ++ show l ++ "{" ++ pstr ++
+--     "} [" ++ pretty1 s ++
+--     " -> " ++ show us ++ "]:"
+--   forM_ mts $ \(ms, t) -> do
+--     putStrLn $ replicate i ' ' ++ show ms ++ " ==> "
+--     printMTree (i + 2) t
+
+
 printMTree :: Int -> MTree -> IO ()
 printMTree i (TerminalLeaf l s gsref) = do
   gs <- IORef.readIORef gsref
-  putStrLn $ replicate i ' ' ++ "T#" ++ show l ++
-    " [" ++ pretty1 s ++ "->" ++ show gs ++ "]"
+  putStrLn $ replicate i ' ' ++ "T#" ++ show l ++ show gs
 printMTree i (StateLeaf l s vref usref p) = do
   v <- IORef.readIORef vref
   us <- IORef.readIORef usref
@@ -79,16 +105,14 @@ printMTree i (StateLeaf l s vref usref p) = do
         Nothing -> "none"
         Just p -> parentStr p
   putStrLn $ replicate i ' ' ++
-    "S#" ++ show l ++ "{" ++ pstr ++ "} [" ++ pretty1 s ++
-    " (" ++ show v ++ "->" ++ show us ++ ")]"
+    "S#" ++ show l ++ "{" ++ pstr ++ "} [" ++ show v ++ "->" ++ show us ++ "]"
 printMTree i (Node l s usref mts p) = do
   us <- IORef.readIORef usref
   let pstr = case p of
         Nothing -> "none"
         Just p -> parentStr p
   putStrLn $ replicate i ' ' ++ "N#" ++ show l ++ "{" ++ pstr ++
-    "} [" ++ pretty1 s ++
-    " -> " ++ show us ++ "]:"
+    "} " ++ show us ++ ":"
   forM_ mts $ \(ms, t) -> do
     putStrLn $ replicate i ' ' ++ show ms ++ " ==> "
     printMTree (i + 2) t
@@ -107,7 +131,7 @@ expand lref ply parent st = do
     modifyIORef' lref (+1)
     gsref <- newIORef $ map fromIntegral $ orderedGoals matchDB st matchRoles
     return $ TerminalLeaf l st gsref
-    else if ply >= maxDepth matchExtra
+    else if ply == maxDepth matchExtra
          then do
            vref <- newIORef 0
            usref <- newIORef $ replicate matchNRoles 0
@@ -128,7 +152,7 @@ expand lref ply parent st = do
                addParent p nn@(StateLeaf _ _ _ _ _) = nn { mtParent = Just p }
                addParent p nn@(Node _ _ _ ch _) =
                  let n' = nn { mtChildren = ch', mtParent = Just p }
-                     ch' = map (\(ms, mt) -> (ms, addParent n' mt)) ch
+                     ch' = map (\(mvs, mt) -> (mvs, addParent n' mt)) ch
                  in n'
                mts = zip (map (map snd) ms) (map (addParent n) chs)
                n = Node l' st usref mts parent
@@ -154,7 +178,7 @@ randomPlay st = do
     randomPlay $ applyMoves matchDB st ms
 
 propagate :: [Double] -> Maybe MTree -> Game ()
-propagate newus (Just t@(Node _ _ usref _ parent)) = do
+propagate newus (Just (Node _ _ usref _ parent)) = do
   us <- readIORef usref
   let us' = zipWith max us newus
   writeIORef usref us'
@@ -167,19 +191,25 @@ chooseBestMove mvus = do
   let i = matchRoleIdx
       subs = sortBy (compare `on` (Down . (!! i) . snd)) mvus
       maxs = snd (head subs) !! i
-      poss = takeWhile (\(ms, ss) -> ss !! i == maxs) subs
+      poss = takeWhile (\(_, ss) -> ss !! i == maxs) subs
       others = map (\(ms, ss) -> (ms, take i ss ++ drop (i + 1) ss)) poss
       sothers = sortBy (compare `on` snd) others
-  return $ (fst (head others)) !! i
+  -- liftIO $ putStrLn $ "poss=" ++ show poss
+  -- liftIO $ putStrLn $ "others=" ++ show others
+  -- liftIO $ putStrLn $ "sothers=" ++ show sothers
+  let mv = (fst (head sothers)) !! i
+  -- liftIO $ putStrLn $ "mv=" ++ show mv
+  return mv
 
 mcUpdates :: MTree -> [MTree] -> Game ()
-mcUpdates top@(Node _ _ topusref _ _) ss = do
+mcUpdates top@(Node _ _ _ _ _) ss = do
   Match{..} <- get
   let ns = length ss
   when (ns > 0) $ do
     is <- getRandomR (0, ns-1)
-    let sl@(StateLeaf _ s vref usref parent) = ss !! is
+    let (StateLeaf _ s vref usref parent) = ss !! is
     sample <- randomPlay s
+    liftIO $ putStrLn $ "sample=" ++ show sample
     v <- readIORef vref
     us <- readIORef usref
     let vr = fromIntegral v
@@ -188,13 +218,14 @@ mcUpdates top@(Node _ _ topusref _ _) ss = do
     writeIORef vref (v + 1)
     modifyIORef' (fromJust $ mcCount matchExtra) (+1)
     propagate us' parent
-  topus <- readIORef topusref
+    --liftIO $ printMTree 0 top
   let (mvs, submts) = unzip $ mtChildren top
   subus <- mapM (readIORef . mtUtils) submts
   let mvus = zip mvs subus
   mv <- chooseBestMove mvus
   setBest mv
   mcUpdates top ss
+mcUpdates _ _ = return ()
 
 bestMove :: State -> Game ()
 bestMove st0 = do
