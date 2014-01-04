@@ -2,6 +2,7 @@
 module Language.GDL.Parser
        ( parse, parseMaybe
        , parseQuery, parseTerm, parseSexp
+       , encodeSexp
        , sexpToTerm, sexpsToDatabase
        ) where
 
@@ -75,6 +76,9 @@ sexpToQuery (SList (SAtom "and" : ts)) = And $ map sexpToQuery ts
 sexpToQuery (SList (SAtom "or" : ts)) = Or $ map sexpToQuery ts
 sexpToQuery (SList []) = Pass
 sexpToQuery t = Query $ sexpToTerm t
+
+encodeSexp :: [Sexp] -> ByteString
+encodeSexp = undefined
 
 -- | Parse S-Expressions from a String.  If the parse was successful,
 -- @Right sexps@ is returned; otherwise, @Left (errorMsg, leftover)@
