@@ -77,8 +77,9 @@ sexpToQuery (SList (SAtom "or" : ts)) = Or $ map sexpToQuery ts
 sexpToQuery (SList []) = Pass
 sexpToQuery t = Query $ sexpToTerm t
 
-encodeSexp :: [Sexp] -> ByteString
-encodeSexp = undefined
+encodeSexp :: Sexp -> ByteString
+encodeSexp (SAtom atom) = atom
+encodeSexp (SList list) = foldl' (\acc el -> B.concat [acc, " ", encodeSexp el]) "(" list `B.append` ")"
 
 -- | Parse S-Expressions from a String.  If the parse was successful,
 -- @Right sexps@ is returned; otherwise, @Left (errorMsg, leftover)@

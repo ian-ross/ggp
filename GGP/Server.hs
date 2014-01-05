@@ -74,11 +74,13 @@ runServer :: ServerArgs -> [PlayerArgs] -> IO ()
 runServer args players = do
   putStrLn $ "Running server with " ++ show (length players) ++ " players for game " ++ show (rulesFile args)
   kif <- B.readFile "hunter.kif"
-  let sclk = undefined -- start clock
-      pclk = undefined -- player clock
-      match = undefined 
-      role = undefined
-      rules = undefined
+  let rules = case parseSexp kif of
+                  Left err -> error $ "Can't parse file:" ++ show err
+                  Right r -> r
+      sclk = "30" -- start clock
+      pclk = "30" -- player clock
+      match = "matchid123"
+      role = "robot"
       startMsg = encodeSexp [SList ["start", SAtom match, SAtom role,
                        SList rules, sclk, pclk]]
       --playMsg = encodeSexp (SList ["play", SAtom match, moves])
