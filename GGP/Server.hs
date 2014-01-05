@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings #-}
-module GGP.Server where
+module Main where
 
 import Prelude hiding (log)
 import Data.Default
@@ -63,7 +63,7 @@ data PlayerArgs = PlayerArgs { playerHost :: String
 data ServerArgs = ServerArgs { rulesFile :: String}
                 deriving (Show, Data, Typeable)
 
-defaultPlayers = [PlayerArgs {playerHost = "127.0.0.1", playerPort = 9147, playerLog = Just "player1.log"}]
+defaultPlayers = [PlayerArgs {playerHost = "http://localhost", playerPort = 9147, playerLog = Just "player1.log"}]
 defaultServerArgs = ServerArgs { rulesFile = "./hunter.kif" }
 
 main :: IO ()
@@ -73,7 +73,7 @@ main = runServer defaultServerArgs defaultPlayers
 runServer :: ServerArgs -> [PlayerArgs] -> IO ()
 runServer args players = do
   putStrLn $ "Running server with " ++ show (length players) ++ " players for game " ++ show (rulesFile args)
-  kif <- B.readFile "hunter.kif"
+  kif <- B.readFile $ rulesFile args
   let rules = case parseSexp kif of
                   Left err -> error $ "Can't parse file:" ++ show err
                   Right r -> r
@@ -81,17 +81,17 @@ runServer args players = do
       pclk = "30" -- player clock
       match = "matchid123"
       role = "robot"
-      startMsg = encodeSexp [SList ["start", SAtom match, SAtom role,
-                       SList rules, sclk, pclk]]
+      startMsg = encodeSexp $ SList ["start", SAtom match, SAtom role,
+                       SList rules, sclk, pclk]
       --playMsg = encodeSexp (SList ["play", SAtom match, moves])
       --stopMsg = encodeSexp (SList ["stop", SAtom match, moves])
   forM_ players $ \player -> do
     initReq <- parseUrl $ playerHost player
     let
-        --req' = initReq {serverPort = playerPort player}
-        req' = initReq
+        req' = initReq {port = playerPort player}
         -- http://stackoverflow.com/questions/5612145/how-to-easily-get-https-post-response-data/5614946#5614946
         req = urlEncodedBody [ ("", startMsg) ] req'
+    putStr $ "req: " ++ show req
     response <- withManager $ httpLbs req
     L.putStr $ responseBody response
     

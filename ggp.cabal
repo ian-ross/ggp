@@ -62,6 +62,21 @@ executable manual-player
   main-is:             manual-player.hs
   ghc-options:         -Wall -fwarn-tabs -O2
 
+executable server
+  build-depends:       ggp,
+                       base                     >= 4.3        && < 5,
+                       bytestring                  >= 0.10.0.2 && < 0.11,
+                       cmdargs                  >= 0.10.5     && < 0.11,
+                       containers               >= 0.5.0.0    && < 0.6,
+                       data-default             >= 0.5.3      && < 0.6,
+                       http-conduit             >= 1.9.5.1    && < 2,
+                       MonadRandom              >= 0.1.12     && < 0.2,
+                       transformers             >= 0.3        && < 0.4,
+                       vector                   >= 0.10.9.1   && < 0.11
+  main-is:             Server.hs
+  hs-source-dirs:      GGP
+  ghc-options:         -Wall -fwarn-tabs -O2
+
 executable player
   build-depends:       ggp,
                        base                     >= 4.3        && < 5,
