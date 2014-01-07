@@ -5,6 +5,7 @@ module Language.GDL.Syntax
        , State, Role, Move
        , escape, unescape
        , sexpToInt, termToInt
+       , intToSexp
        , (|+|)
        ) where
 
@@ -74,6 +75,8 @@ unescape = B.reverse . B.pack . snd .
                                  else (False, c : cs)
     unescapeChar (_, cs) c     = (False, c : cs)
 
+intToSexp :: Int -> Sexp
+intToSexp i = fromString $ show i
 
 sexpToInt :: Sexp -> Maybe Int
 sexpToInt (SAtom s) = case B8.readInt s of

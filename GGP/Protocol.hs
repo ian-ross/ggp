@@ -16,6 +16,8 @@ import Network.Wai.Util
 
 import Language.GDL
 
+import Debug.Trace
+
 respHdrs :: String -> ResponseHeaders
 respHdrs body = let len = length body
                 in [(hContentType, "text/acl"),
@@ -43,8 +45,8 @@ data GGPReply = Available
 ggpParse :: Request -> ResourceT IO (Either String GGPRequest)
 ggpParse req = do
   body <- (foldedCase . mk) <$> bodyBytestring req
-  case parseSexp body of
-    Right [sexp] -> return $ makeGGPRequest sexp
+  case trace ("body:" ++ show body) $ parseSexp body of
+    Right [sexp] -> trace ("sexp: " ++ show sexp) $ return $ makeGGPRequest sexp
     _            -> return $ Left "invalid message"
 
 makeGGPRequest :: Sexp -> Either String GGPRequest
