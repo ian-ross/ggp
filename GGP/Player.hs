@@ -203,6 +203,7 @@ doPlay :: ByteString -> Term -> Player a -> MatchMap a -> ResourceT IO GGPReply
 doPlay matchid moves player matchmap = do
   let rmatch = matchmap M.! matchid
   (gen, m) <- liftIO $ readIORef rmatch
+  liftIO $ putStrLn ("moves:" ++ show moves)
   let zms = zipMoves (matchRoles m) moves
       st = matchState m
       st' = maybe st (applyMoves (matchDB m) st) zms

@@ -111,6 +111,52 @@ runServer serverArgs playersCfg = do
 
   let players = zip playersShuffled rs
   send_start players matchId rules sclk pclk
+  moves <- play players matchId rules pclk
+  putStrLn $ "final moves:" ++ show moves
+
+play:: [(PlayerArgs, B.ByteString)] -> B.ByteString -> [Sexp] -> Int -> IO [Sexp]
+play players matchId rules pclk = do
+  let
+      db = sexpsToDatabase rules
+      rs = roles db
+
+      --TODO: implement
+      getLegalMoves :: [Sexp]
+      getLegalMoves = undefined
+
+      checkResponseMove :: B.ByteString -> Either Sexp Sexp
+      checkResponseMove moveRaw = move
+        where
+          legals = getLegalMoves
+          move = case parseSexp moveRaw of
+                        Left _err -> Left $ head legals
+                        Right [m] -> 
+                            --TODO: check if m in legal moves
+                            Right m
+                        Right _ -> Left $ head legals
+
+      playStep :: [Sexp] -> Int -> IO [Sexp]
+      playStep moves step = foldM (playStepRole step) moves players
+
+      playStepRole :: Int -> [Sexp] -> (PlayerArgs, B.ByteString) -> IO [Sexp]
+      playStepRole step moves (player,role) = do
+        initReq <- parseUrl $ playerHost player
+        let 
+            playMsg = encodeSexp (SList ["play", SAtom matchId, head moves])
+            req      = initReq {port = playerPort player, requestBody = RequestBodyBS playMsg}
+        putStrLn $ "req: " ++ show req
+        response <- withManager $ httpLbs req
+        let moveRaw = L8.toStrict $ responseBody response
+        putStrLn $ "answer from " ++ show player ++ ": " ++ (B.unpack moveRaw)
+        move <- case checkResponseMove moveRaw of
+            Left m -> do 
+              putStrLn $ "incorrect move " ++ (show moveRaw) ++ "; use legal move instead: " ++ (show m)
+              return m
+            Right m -> return m
+        return (move:moves)
+
+  foldM playStep [SAtom "nil"] [1]
+  
 
 -- TODO: forkIO
 -- TODO: wait sclk seconds if the player doesn't respond 'ready'

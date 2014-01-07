@@ -7,6 +7,7 @@ module GGP.Protocol
 
 import Control.Applicative
 import Control.Monad.Trans.Resource
+import Control.Monad.IO.Class
 import Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as B
 import Data.CaseInsensitive
@@ -15,8 +16,6 @@ import Network.Wai
 import Network.Wai.Util
 
 import Language.GDL
-
-import Debug.Trace
 
 respHdrs :: String -> ResponseHeaders
 respHdrs body = let len = length body
@@ -45,8 +44,9 @@ data GGPReply = Available
 ggpParse :: Request -> ResourceT IO (Either String GGPRequest)
 ggpParse req = do
   body <- (foldedCase . mk) <$> bodyBytestring req
-  case trace ("body:" ++ show body) $ parseSexp body of
-    Right [sexp] -> trace ("sexp: " ++ show sexp) $ return $ makeGGPRequest sexp
+  liftIO $ putStrLn ("body:" ++ show body)
+  case parseSexp body of
+    Right [sexp] -> return $ makeGGPRequest sexp
     _            -> return $ Left "invalid message"
 
 makeGGPRequest :: Sexp -> Either String GGPRequest
