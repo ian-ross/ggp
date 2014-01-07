@@ -136,26 +136,27 @@ play players matchId rules pclk = do
                         Right _ -> Left $ head legals
 
       playStep :: [Sexp] -> Int -> IO [Sexp]
-      playStep moves step = foldM (playStepRole step) moves players
+      playStep moves step = do
+        stepMoves <- mapM (playStepRole step $ head moves) players
+        return (SList stepMoves : moves)
 
-      playStepRole :: Int -> [Sexp] -> (PlayerArgs, B.ByteString) -> IO [Sexp]
-      playStepRole step moves (player,role) = do
+      playStepRole :: Int -> Sexp -> (PlayerArgs, B.ByteString) -> IO Sexp
+      playStepRole step prevStepMoves (player,role) = do
         initReq <- parseUrl $ playerHost player
         let 
-            playMsg = encodeSexp (SList ["play", SAtom matchId, head moves])
+            playMsg = encodeSexp (SList ["play", SAtom matchId, prevStepMoves])
             req      = initReq {port = playerPort player, requestBody = RequestBodyBS playMsg}
         putStrLn $ "req: " ++ show req
         response <- withManager $ httpLbs req
         let moveRaw = L8.toStrict $ responseBody response
         putStrLn $ "answer from " ++ show player ++ ": " ++ (B.unpack moveRaw)
-        move <- case checkResponseMove moveRaw of
+        case checkResponseMove moveRaw of
             Left m -> do 
               putStrLn $ "incorrect move " ++ (show moveRaw) ++ "; use legal move instead: " ++ (show m)
               return m
             Right m -> return m
-        return (move:moves)
 
-  foldM playStep [SAtom "nil"] [1]
+  foldM playStep [SAtom "nil"] [1..5]
   
 
 -- TODO: forkIO
@@ -166,7 +167,6 @@ send_start players matchId rules sclk pclk = do
     initReq <- parseUrl $ playerHost player
     let startMsg = encodeSexp $ SList ["start", SAtom matchId, SAtom role, SList rules, intToSexp sclk, intToSexp pclk]
         req      = initReq {port = playerPort player, requestBody = RequestBodyBS startMsg}
-        -- http://stackoverflow.com/questions/5612145/how-to-easily-get-https-post-response-data/5614946#5614946
     putStr $ "req: " ++ show req
     response <- withManager $ httpLbs req
     putStr $ "answer from " ++ show player ++ ": "
