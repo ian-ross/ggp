@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
@@ -24,34 +24,31 @@ import qualified Language.GDL as GDL
 import GGP.Utils
 
 
-data Match a = Match { matchDB :: Database
+type RoleString = B.ByteString
+type MyMove = Sexp
+data Match = Match {   matchId :: B.ByteString
+                     , matchDB :: Database
+                     , matchRules :: [Sexp]
                      , matchState :: !GDL.State
-                     , matchRoles :: [Role]
-                     , matchLastMoves :: Maybe [(Role, Move)]
+                     , matchRoles :: [RoleString]
+                     , matchPlayers :: [PlayerArgs]
+                     , matchMoves :: [MyMove]
                      , matchStartClock :: Int
                      , matchPlayClock :: Int
-                     , matchExtra :: a
                      , matchLogging :: Bool }
 
-type GGP a b = RandT StdGen (StateT (Match a) IO) b
+type GGP a = StateT Match IO a
 
-get :: Monad m => RandT g (StateT s m) s
-get = lift CMTS.get
+get :: Monad m => StateT s m s
+get = CMTS.get
 
-put :: Monad m => s -> RandT g (StateT s m) ()
-put s = lift (CMTS.put s)
+gets :: (s -> a) -> StateT s IO a
+gets f = liftM f CMTS.get
 
-gets :: Monad m => (s -> a) -> RandT g (StateT s m) a
-gets f = lift (liftM f CMTS.get)
+modify :: Monad m => (s -> s) -> StateT s m ()
+modify f = CMTS.modify f
 
-modify :: Monad m => (s -> s) -> RandT g (StateT s m) ()
-modify f = lift (CMTS.modify f)
-
-modExtra :: Monad m => (a -> a) -> RandT g (StateT (Match a) m) ()
-modExtra f = modify $ \st -> let !new = f (matchExtra st)
-                                 in st { matchExtra = new }
-
-logMsg :: String -> GGP a ()
+logMsg :: String -> GGP ()
 logMsg msg = do
   logging <- gets matchLogging
   when logging $ liftIO $ putStrLn msg
@@ -92,39 +89,49 @@ runServer serverArgs playersCfg = do
   rules <- case parseSexp kif of
                   Left err -> error $ "Can't parse file:" ++ show err
                   Right r -> return r
-  let
-      db = sexpsToDatabase rules
-      rs = map (\(Atom a) -> a) $ roles db
-      sclk = 30 -- start clock
-      pclk = 30 -- player clock
-      matchId = generateId
-      --playMsg = encodeSexp (SList ["play", SAtom matchId, moves])
-      --stopMsg = encodeSexp (SList ["stop", SAtom matchId, moves])
 
   -- TODO: wait until needed number of players is ready
   let playersReady = playersCfg
 
+  playersShuffled <- shuffle playersReady
+
+  let
+      db = sexpsToDatabase rules
+      st = initState db
+      rs = map (\(Atom a) -> a) $ roles db
+      --rs = roles db
+      sclk = 30 -- start clock
+      pclk = 30 -- player clock
+      matchId = generateId
+      match = Match matchId db rules st rs playersShuffled [SAtom "nil"] sclk pclk True
+      --playMsg = encodeSexp (SList ["play", SAtom matchId, moves])
+      --stopMsg = encodeSexp (SList ["stop", SAtom matchId, moves])
+
+
   when (length rs > length playersReady) $ error ("Not enough players:" ++
           "got " ++ show (length playersReady) ++ ", needed " ++ show (length rs))
 
-  playersShuffled <- shuffle playersReady
-
-  let players = zip playersShuffled rs
-  send_start players matchId rules sclk pclk
-  moves <- play players matchId rules pclk
+  start_resp <- liftIO $! evalStateT send_start match
+  putStrLn $ "start response:" ++ show start_resp 
+  moves <- liftIO $! evalStateT play match
   putStrLn $ "final moves:" ++ show moves
 
-play:: [(PlayerArgs, B.ByteString)] -> B.ByteString -> [Sexp] -> Int -> IO [Sexp]
-play players matchId rules pclk = do
+zipMoves :: [RoleString] -> Sexp -> [(Role, Move)]
+zipMoves _  (SAtom "nil") = [] 
+zipMoves rs (SList ms) = zip (map (\r -> Atom r) rs) (map sexpToTerm ms)
+zipMoves _  _             = [] 
+
+-- return the list of moves, one element - all moves for the one step (SList)
+play:: GGP [Sexp]
+play = do
+  Match {..} <- get
   let
-      db = sexpsToDatabase rules
-      rs = roles db
 
       --TODO: implement
-      getLegalMoves :: [Sexp]
+      getLegalMoves :: [MyMove]
       getLegalMoves = undefined
 
-      checkResponseMove :: B.ByteString -> Either Sexp Sexp
+      checkResponseMove :: B.ByteString -> Either MyMove MyMove 
       checkResponseMove moveRaw = move
         where
           legals = getLegalMoves
@@ -135,41 +142,52 @@ play players matchId rules pclk = do
                             Right m
                         Right _ -> Left $ head legals
 
-      playStep :: [Sexp] -> Int -> IO [Sexp]
-      playStep moves step = do
-        stepMoves <- mapM (playStepRole step $ head moves) players
-        return (SList stepMoves : moves)
+      playStep :: Int -> GGP ()
+      playStep step = do
+        Match {..} <- get
+        let players = zip matchPlayers matchRoles
+            zms = zipMoves matchRoles (head matchMoves)
+            newState = applyMoves matchDB matchState zms
+        stepMoves <- mapM (playStepRole step) players
+        modify $ \st  -> st {matchMoves = (SList stepMoves) : matchMoves}
 
-      playStepRole :: Int -> Sexp -> (PlayerArgs, B.ByteString) -> IO Sexp
-      playStepRole step prevStepMoves (player,role) = do
+      playStepRole :: Int -> (PlayerArgs, RoleString) -> GGP Sexp
+      playStepRole step (player,role) = do
+        Match {..} <- get
         initReq <- parseUrl $ playerHost player
         let 
-            playMsg = encodeSexp (SList ["play", SAtom matchId, prevStepMoves])
+            playMsg = encodeSexp (SList ["play", SAtom matchId, head matchMoves])
             req      = initReq {port = playerPort player, requestBody = RequestBodyBS playMsg}
-        putStrLn $ "req: " ++ show req
+        liftIO $ putStrLn $ "req: " ++ show req
         response <- withManager $ httpLbs req
         let moveRaw = L8.toStrict $ responseBody response
-        putStrLn $ "answer from " ++ show player ++ ": " ++ (B.unpack moveRaw)
+        liftIO $ putStrLn $ "answer from " ++ show player ++ ": " ++ (B.unpack moveRaw)
         case checkResponseMove moveRaw of
             Left m -> do 
-              putStrLn $ "incorrect move " ++ (show moveRaw) ++ "; use legal move instead: " ++ (show m)
+              liftIO $ putStrLn $ "incorrect move " ++ (show moveRaw) ++ "; use legal move instead: " ++ (show m)
               return m
             Right m -> return m
 
-  foldM playStep [SAtom "nil"] [1..5]
+  mapM_ playStep [1..5]
+
+  --gets matchMoves
+  Match{..} <- get
+  return matchMoves
   
 
 -- TODO: forkIO
 -- TODO: wait sclk seconds if the player doesn't respond 'ready'
-send_start :: [(PlayerArgs, B.ByteString)] -> B.ByteString -> [Sexp] -> Int -> Int -> IO ()
-send_start players matchId rules sclk pclk = do
-  forM_ players $ \(player, role) -> do
+send_start :: GGP ()
+send_start = do
+  Match {..} <- get
+  let players = zip matchPlayers matchRoles
+  forM_ players $ \(player, role) -> liftIO $ do
     initReq <- parseUrl $ playerHost player
-    let startMsg = encodeSexp $ SList ["start", SAtom matchId, SAtom role, SList rules, intToSexp sclk, intToSexp pclk]
+    let startMsg = encodeSexp $ SList ["start", SAtom matchId, SAtom role, SList matchRules, intToSexp matchStartClock, intToSexp matchPlayClock]
         req      = initReq {port = playerPort player, requestBody = RequestBodyBS startMsg}
-    putStr $ "req: " ++ show req
+    liftIO $ putStr $ "req: " ++ show req
     response <- withManager $ httpLbs req
-    putStr $ "answer from " ++ show player ++ ": "
+    liftIO $ putStr $ "answer from " ++ show player ++ ": "
     L8.putStrLn $ responseBody response
 
 
