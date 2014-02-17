@@ -33,7 +33,6 @@ import Network.Wai
 import Network.Wai.Handler.Warp
 import Network.Wai.Util
 import System.Console.CmdArgs.Implicit hiding (Default, def)
-import System.Exit
 
 import Language.GDL hiding (State)
 import qualified Language.GDL as GDL
@@ -131,7 +130,7 @@ runPlayer p = do
   putStrLn $ "Parameters: " ++
     (intercalate "," $ map (\(k,v) -> k ++ "=" ++ v) $ M.toList ps)
   shutdown <- newEmptyMVar
-  forkIO $ run (port pas) (handler shutdown (log pas) ps matchInfo p)
+  void $ forkIO $ run (port pas) (handler shutdown (log pas) ps matchInfo p)
   takeMVar shutdown
 
 processParams :: String -> PlayerParams
@@ -221,9 +220,10 @@ doPlay matchid moves player matchmap = do
     void $ readMVar waitVar
     killThread worker
     killThread killer
-    mv <- readSV $ matchCurrentBestMove match'
+    putStrLn $ "Getting best move"
+    mv <- readSV $! matchCurrentBestMove match'
+    putStrLn $ "Best move: " ++ prettyPrint mv
     _ <- runStateT (runRandT (postMessage player) playgen) match'
-    putStrLn $ "Making move: " ++ prettyPrint mv
     writeIORef rmatch (gen', match')
     return mv
   return $ Action move

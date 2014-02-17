@@ -13,6 +13,7 @@ import MobilityMinimax
 import MobilityAlphaBeta
 import GoalAlphaBeta
 import MonteCarlo
+import MonteCarloTreeSearch
 
 main :: IO ()
 main = defaultMain $ \pas -> do
@@ -32,4 +33,5 @@ availablePlayers =
   , ("mobility-minimax",      runPlayer mobilityMinimaxPlayer)
   , ("mobility-alpha-beta",   runPlayer mobilityAlphaBetaPlayer)
   , ("goal-alpha-beta",       runPlayer goalAlphaBetaPlayer)
-  , ("monte-carlo",           runPlayer monteCarloPlayer) ]
+  , ("monte-carlo",           runPlayer monteCarloPlayer)
+  , ("mcts",                  runPlayer monteCarloTreeSearchPlayer) ]

@@ -81,6 +81,7 @@ executable player
                        MobilityAlphaBeta
                        GoalAlphaBeta
                        MonteCarlo
+                       MonteCarloTreeSearch
   ghc-options:         -Wall -fwarn-tabs -O2
 
 test-suite profiling-1
