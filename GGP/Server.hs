@@ -7,8 +7,8 @@ import Prelude hiding (log)
 --import Data.Default
 import Control.Monad
 import Control.Monad.IO.Class
-import Control.Monad.Random
-import Control.Monad.Trans.Class
+--import Control.Monad.Random
+--import Control.Monad.Trans.Class
 import qualified Control.Monad.Trans.State.Strict as CMTS
 import qualified Data.ByteString.Char8 as B
 --import qualified Data.ByteString.Lazy as L
@@ -23,6 +23,8 @@ import qualified Language.GDL as GDL
 --import GGP.Protocol
 import GGP.Utils
 
+
+import Debug.Trace
 
 type RoleString = B.ByteString
 type MyMove = Sexp
@@ -121,54 +123,51 @@ zipMoves _  (SAtom "nil") = []
 zipMoves rs (SList ms) = zip (map (\r -> Atom r) rs) (map sexpToTerm ms)
 zipMoves _  _             = [] 
 
+playStep :: Int -> GGP ()
+playStep step = do
+  Match {..} <- get
+  let players = zip matchPlayers matchRoles
+      zms = zipMoves matchRoles (head matchMoves)
+  stepMoves <- mapM (playStepRole step) players
+  trace "hello2" $ return ()
+  let newState = applyMoves matchDB matchState zms
+      newMoves = (SList stepMoves) : matchMoves
+      terminal = isTerminal matchDB newState
+
+  trace "hello3" $ return ()
+  modify $ \st  -> st {matchMoves = newMoves, matchState = newState }
+  trace ("hello4" ++ show newState) $ return ()
+  unless terminal $ playStep (step+1)
+
+playStepRole :: Int -> (PlayerArgs, RoleString) -> GGP Sexp
+playStepRole _step (player,role) = do
+  Match {..} <- get
+  initReq <- parseUrl $ playerHost player
+  let 
+      playMsg  = encodeSexp (SList ["play", SAtom matchId, head matchMoves])
+      req      = initReq {port = playerPort player, requestBody = RequestBodyBS playMsg}
+      legals   = legal matchDB matchState (sexpToTerm $ SAtom role)
+      l        = case legals of
+                    (Atom a:_) -> SAtom a
+                    _ -> error "incorrect legals"
+
+  liftIO $ putStrLn $ "req: " ++ show req
+  response <- withManager $ httpLbs req
+  let moveRaw = L8.toStrict $ responseBody response
+  liftIO $ putStrLn $ "answer from " ++ show player ++ ": " ++ (B.unpack moveRaw)
+  case parseSexp moveRaw of
+      Left _err -> do 
+          liftIO $ putStrLn $ "can't parse move '" ++ (show moveRaw) ++ "'; used legal move instead: " ++ (show l)
+          return l
+      Right [m] | (sexpToTerm m) `elem` legals -> return m
+      Right _ -> do 
+          liftIO $ putStrLn $ "illegal move '" ++ (show moveRaw) ++ "'; used legal move instead: " ++ (show l)
+          return l
+
 -- return the list of moves, one element - all moves for the one step (SList)
 play:: GGP [Sexp]
 play = do
-  Match {..} <- get
-  let
-
-      --TODO: implement
-      getLegalMoves :: [MyMove]
-      getLegalMoves = undefined
-
-      checkResponseMove :: B.ByteString -> Either MyMove MyMove 
-      checkResponseMove moveRaw = move
-        where
-          legals = getLegalMoves
-          move = case parseSexp moveRaw of
-                        Left _err -> Left $ head legals
-                        Right [m] -> 
-                            --TODO: check if m in legal moves
-                            Right m
-                        Right _ -> Left $ head legals
-
-      playStep :: Int -> GGP ()
-      playStep step = do
-        Match {..} <- get
-        let players = zip matchPlayers matchRoles
-            zms = zipMoves matchRoles (head matchMoves)
-            newState = applyMoves matchDB matchState zms
-        stepMoves <- mapM (playStepRole step) players
-        modify $ \st  -> st {matchMoves = (SList stepMoves) : matchMoves}
-
-      playStepRole :: Int -> (PlayerArgs, RoleString) -> GGP Sexp
-      playStepRole step (player,role) = do
-        Match {..} <- get
-        initReq <- parseUrl $ playerHost player
-        let 
-            playMsg = encodeSexp (SList ["play", SAtom matchId, head matchMoves])
-            req      = initReq {port = playerPort player, requestBody = RequestBodyBS playMsg}
-        liftIO $ putStrLn $ "req: " ++ show req
-        response <- withManager $ httpLbs req
-        let moveRaw = L8.toStrict $ responseBody response
-        liftIO $ putStrLn $ "answer from " ++ show player ++ ": " ++ (B.unpack moveRaw)
-        case checkResponseMove moveRaw of
-            Left m -> do 
-              liftIO $ putStrLn $ "incorrect move " ++ (show moveRaw) ++ "; use legal move instead: " ++ (show m)
-              return m
-            Right m -> return m
-
-  mapM_ playStep [1..5]
+  playStep 1
 
   --gets matchMoves
   Match{..} <- get
